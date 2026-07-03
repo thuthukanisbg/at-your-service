@@ -111,12 +111,32 @@ Codex and Claude Code may both work in this project. Before changing files:
 
 ## Current State
 
-Milestones 1-3 are done. Milestone 4 (customer marketplace screens) is
-in progress, being built screen-by-screen against the design handoff's
-Customer flow: splash → onboarding → auth → **home (done)** → service →
-book → pay → track → rate. Provider/Admin still have their pre-handoff
-placeholder home screens (functional, but not yet re-built against the
-handoff's `prov_*`/`admin_*` screen specs — that's next, role by role).
+Milestones 1-4 are functionally done for all three roles' primary flows,
+rebuilt against the handoff role by role:
+- **Customer** (milestone 4): home → service → book → pay → track → rate,
+  all built.
+- **Provider** (milestone 5): jobs → job details → navigate → in progress →
+  schedule → earnings → profile, all built, replacing the pre-handoff
+  `ProviderHomeScreen`.
+- **Admin** (milestone 6): dashboard → provider review, built, replacing
+  the pre-handoff `AdminHomeScreen`.
+- **Verify** — a 7-step provider KYC stepper. Not in the original milestone
+  list (found in the handoff after Provider/Admin were scoped); entered
+  from Provider Profile's "View verification flow".
+
+A design-token **tightening pass** ran across `AppTheme`/`AppTokens`/
+`AppColors` and all built screens partway through this work (see "Design
+tightening pass" below) — triggered by feedback that the app looked "a bit
+chubby" next to the handoff. It found and fixed a real, high-impact bug
+(`MobileFrame` was 430px wide instead of the handoff's exact 392px), which
+in turn exposed several pre-existing overflow bugs that the too-wide frame
+had been masking.
+
+Still open: Splash/Onboarding/Auth as the real entry flow ahead of
+`RoleSelectScreen`; Customer's Messages/Chat/Profile/Saved Addresses
+(`cust_msgs`/`cust_chat`/`cust_profile`/`cust_address`); Admin's
+Bookings/Providers/More tabs beyond Dashboard — all still `ComingSoonTab`
+placeholders, no spec was pulled for them yet. Then Firebase reconnect.
 
 - `lib/core/` — theme (`AppColors` fixed accents, `AppTheme` light/dark
   builder + `AppTheme.amberAction`, `AppTokens` theme-variant surface/text
@@ -124,9 +144,12 @@ handoff's `prov_*`/`admin_*` screen specs — that's next, role by role).
   shared widgets (`AppCard`, `SectionHeader`, `StatusChip`, `StatTile`,
   `MobileFrame`, `RoleNavShell`/`NavTab` (with `showBadge`), `ComingSoonTab`).
 - `lib/models/` — `UserRole`, `ServiceCategory` (now carries `tint` +
-  `price`), `ServiceListing` (`providerName` is nullable — null means
-  "verified pros" generally, not one named provider), `Booking`,
-  `JobRequest`, `ProviderApplication` (plain Dart, no backend coupling).
+  `price` + `chipBg`), `ServiceListing` (`providerName` is nullable — null
+  means "verified pros" generally, not one named provider), `Booking`,
+  `ProviderJob`, `AdminApplicant` (plain Dart, no backend coupling).
+  `JobRequest`/`ProviderApplication` were deleted once the Provider/Admin
+  rebuilds made them unused — don't recreate them without checking they're
+  actually still needed first.
 - `lib/features/role_select/` — `RoleSelectScreen` (the handoff's
   "chooser"), rebuilt pixel-accurate to the handoff: amber house-mark logo,
   "I need a service / Customer / ..." card hierarchy (action phrase is the
@@ -142,16 +165,58 @@ handoff's `prov_*`/`admin_*` screen specs — that's next, role by role).
   data), gradient promo card (whole card is one tap target, not just the
   "Book Now" pill — matches the prototype's `onClick` placement), single
   Recommended listing card. Category tap, promo tap, and recommended-card
-  tap all go to Service Details next (not built yet) — show "coming soon"
-  honestly rather than faking navigation.
-- `lib/features/provider/` — `ProviderShell` (bottom nav: Jobs,
-  Schedule\*, Earnings\*, Profile\*) wrapping `ProviderHomeScreen`
-  (pre-handoff design, still functional): application status banner,
-  stats, job requests with working Accept/Decline (local state).
-- `lib/features/admin/` — `AdminShell` (bottom nav: Overview, Bookings\*,
-  Providers\*, More\*) wrapping `AdminHomeScreen` (pre-handoff design,
-  still functional): marketplace stats, provider approval queue with
-  working Approve/Reject (local state).
+  tap all push `ServiceDetailsScreen`, which chains forward through the
+  rest of the booking flow: `BookScheduleScreen` (date/time selection,
+  local `setState`) → `ReviewPayScreen` (receives the chosen date/time via
+  constructor params; payment-method selection is local `setState`) →
+  `TrackBookingScreen` (booking-status timeline, live-map placeholder with
+  a diagonal-stripe `CustomPainter`, pulsing "on the way" dot) →
+  `RateReviewScreen` (star rating + toggleable quick-tag chips, both local
+  `setState`). "Submit Review" does
+  `Navigator.popUntil((route) => route.isFirst)` to drop the whole pushed
+  stack and land back on the Home tab — matches the handoff's `submitReview
+  → cust_home` behavior. Two shared widgets back this flow:
+  `lib/core/widgets/detail_screen_header.dart` (the back-chevron + title row
+  repeated on every pushed screen) and `primary_cta_button.dart` (the
+  54px-tall CTA with the handoff's colored glow shadow, which
+  `ElevatedButton.elevation` can't produce on its own — see
+  `AppColors.heroGradient*` for the same trick applied to the hero
+  gradient's ~120° angle).
+- `lib/features/provider/` — `ProviderShell` (bottom nav: Jobs, Schedule,
+  Earnings, Profile — all four now real screens). `ProviderJobsScreen`
+  (Available/Accepted segmented toggle — visual only, matches the handoff's
+  own lack of an `onClick` there) → tapping a job card pushes
+  `ProviderJobDetailsScreen(job)` (payout is computed live as 90% of *that*
+  job's price, not hardcoded, since the handoff's one example — R600 job →
+  R540 payout — only makes sense as a 10%-fee rule) → "Accept Job" pushes
+  `ProviderNavigateScreen` (reuses the customer flow's
+  `DiagonalStripesPainter`, extracted to `core/widgets/` since both screens
+  needed it with different stripe widths) → "Start Navigation" pushes
+  `ProviderInProgressScreen` (checkable task list, local `setState`;
+  "Complete Job" does `popUntil(isFirst)`, landing on whichever tab was
+  active rather than force-switching to Profile like the handoff's
+  `goProvProfile` — same simplification as the customer flow, to avoid
+  adding tab-index-control to `RoleNavShell` for one edge case).
+  `ProviderScheduleScreen`/`ProviderEarningsScreen` are static per the
+  handoff (no interactive elements specified). `ProviderProfileScreen`'s
+  "View verification flow" pushes `VerifyScreen` — a 7-step KYC stepper
+  (`_verifyStep` local state, defaults to 4 matching the handoff's demo
+  state) with a gradient progress bar and a completed/celebration state
+  once all 7 steps are done.
+- `lib/features/admin/` — `AdminShell` (bottom nav: Overview real;
+  Bookings/Providers/More still `ComingSoonTab`, no spec pulled for those).
+  `AdminDashboardScreen` (stats grid, 7-bar revenue chart, pending-approvals
+  list) → tapping an applicant pushes `AdminReviewScreen(applicant)`, which
+  pops `true`/`false`/`null` for approve/reject/back-without-deciding;
+  Dashboard awaits the result and removes the applicant from its local
+  pending list on a decision — genuinely working Approve/Reject, not the
+  handoff's literal click-through-only buttons (both `onClick`s just call
+  `goAdminDash` in the source with no state change), restoring the
+  pre-handoff `AdminHomeScreen`'s equivalent working behavior onto the new
+  visual design. Applicant details/verification-checklist content is fixed
+  generic mock data reused across all applicants (the handoff's one review
+  example has no per-applicant variation there either) — only the tapped
+  applicant's own name/role/avatar are genuinely per-applicant.
 
   (\* = `ComingSoonTab` placeholder — intentional, see design reference above.)
 
@@ -168,9 +233,76 @@ Verified with:
 /Users/thuthukaninxumalo/development/flutter/bin/flutter test
 ```
 
-Both pass (4 widget tests covering role navigation). Also manually verified
-by running on Chrome (`flutter run -d chrome`) and screenshotting all four
-screens.
+Both pass — 25 tests total: `test/widget_test.dart` (role navigation),
+`test/mobile_frame_test.dart` (frame width, see below),
+`test/customer_booking_flow_test.dart`, `test/provider_flow_test.dart`,
+`test/admin_flow_test.dart`, `test/verify_flow_test.dart` (one file per
+role flow, each walking its full screen-to-screen chain, not just smoke
+tests). None of this was manually screenshotted in-browser in the sessions
+that built it (computer-use/screen access was unavailable throughout) —
+fidelity was instead verified by direct line-by-line comparison against
+the handoff's literal HTML/CSS, not the README's paraphrased descriptions,
+which occasionally drift from the literal markup (e.g. the README's
+"What's included" checklist has no such heading in the actual
+`cust_service` markup — the screen correctly omits it). Screenshot-verify
+the whole app in-browser before calling any of this final — an earlier
+session did screenshot the pre-fidelity-fix versions of
+`RoleSelectScreen`/`CustomerHomeScreen` only, nothing since.
+
+### Design tightening pass ("chubby" feedback)
+User feedback that the app looked "a bit chubby" next to the handoff led to
+two rounds of investigation:
+
+**Round 1 — theme/token precision.** Colors and `AppTokens` were already
+exact; the real drift was in `AppTheme`'s typography (`titleLarge`'s
+letter-spacing was -0.3, handoff has zero instances of any heading using
+anything less negative than -0.4; `labelLarge`/`labelMedium` had a spurious
+`+0.1` letter-spacing with no basis anywhere in the source — confirmed via
+a full-file grep of every literal `letter-spacing:` value, all seven of
+which are negative) and in a few widgets: `AppCard`'s `InkWell` used radius
+20 against `cardTheme`'s 18, and — the highest-impact one — `RoleNavShell`
+used Material 3's `NavigationBar`, which always reserves layout space for
+a pill-shaped selection indicator even with `indicatorColor:
+Colors.transparent`. Rebuilt it as a custom flat bar matching the
+handoff's literal `padding: 12/9/12/24` + 1px top border exactly.
+
+**Round 2 — `MobileFrame` was the real culprit.** User measured the actual
+prototype's DOM at exactly 392×812 and the running build at ~430px wide —
+`MobileFrame._phoneWidth` was hardcoded to 430 instead of the handoff's
+392. Fixed to exactly 392, verified empirically (not just trusting the
+constant) with `test/mobile_frame_test.dart`, which measures the actual
+rendered child width via `tester.getSize()`, not the `SizedBox`'s declared
+property. **This surfaced several real, pre-existing `RenderFlex` overflow
+bugs** the too-wide frame had been silently masking (`ServiceDetailsScreen`
+rating row, `ReviewPayScreen` summary row, `ProviderJobsScreen` time/dist
+row) — all the same unbounded-Row pattern below, fixed with
+`Flexible`/`Expanded`. Also revealed that the customer-flow test harness
+wasn't wrapping screens in `MobileFrame` at all, so those "isolated screen"
+tests had been silently running at the full ~800px test-viewport width the
+whole time — fixed by wrapping the harness in `MobileFrame`, which is what
+actually caught the `ReviewPayScreen` bug. **If you add a new screen and
+wrap it in a test harness, always include `MobileFrame`** — otherwise the
+test proves nothing about the width the app actually renders at.
+
+### Fidelity fixes worth knowing about
+A design-fidelity pass (comparing built screens line-by-line against the
+handoff's literal CSS, not just "has the right elements") found and fixed
+several small drifts in the already-built `RoleSelectScreen`/
+`CustomerHomeScreen` — worth knowing about since they're easy to
+reintroduce by copy-pasting older patterns:
+- `formatRand()` used to insert a space after `R` (`"R 600"`). The handoff
+  **never** spaces it (`R600`, `R1,200`, `R24.5k`) — fixed globally, so any
+  new screen using `formatRand` gets this for free.
+- Colored "glow" shadows (primary buttons, hero/promo cards) need
+  `spreadRadius` (often negative) to match the CSS `box-shadow`'s spread
+  value, not just `blurRadius`/`offset` — easy to drop by accident.
+- Per-category chip backgrounds in the handoff use *different* alpha values
+  per category (0.14 vs 0.16), not one uniform tint alpha — see
+  `ServiceCategory.chipBg` vs `.tint`.
+- Lucide (this pub version) has no filled/solid star glyph, only outline —
+  so anywhere the handoff shows a filled amber star (ratings, the Rate &
+  Review stars) is an accepted, unavoidable fidelity gap, not a bug to keep
+  chasing.
 
 Gotchas hit and fixed (still apply going forward):
 - A `Text` placed directly in a `Row` (without `Expanded`/`Flexible`) gets
@@ -187,9 +319,41 @@ Gotchas hit and fixed (still apply going forward):
 - When changing anything in `AppColors`/`AppTokens`, run `flutter analyze`
   immediately — every screen referencing an old field name fails loudly
   and the fix list is mechanical but easy to miss one of.
+- In widget tests, a `ListView` taller than the test surface (default
+  ~600px) only builds children within the viewport/cache extent — `find`
+  returns *zero* matches for anything scrolled past the fold, not a
+  found-but-unreachable widget. Use `tester.scrollUntilVisible(...,
+  scrollable: find.byType(Scrollable))`, not `tester.ensureVisible()` —
+  `ensureVisible` assumes the target is already built and just needs
+  scrolling into the viewport, so it throws `Bad state: No element` on
+  anything the `ListView` hasn't built yet. `scrollUntilVisible` scrolls
+  and re-checks incrementally, which handles both cases. Hit this on
+  several screens across every role's test file.
+- `BoxDecoration` cannot combine a non-uniform `Border` (different width
+  per side — e.g. a 3px colored "accent strip" on one edge, 1px elsewhere)
+  with a `borderRadius`; Flutter throws at paint time, CSS just silently
+  allows it. Split into a separate accent-colored strip `Container` next to
+  a normally-bordered, normally-rounded card instead (see
+  `ProviderScheduleScreen._ScheduleRow`'s appointment cards).
+- Any `AnimationController..repeat()` (used for the handoff's `pulseDot`
+  pulsing-dot effect — see `TrackBookingScreen._PulsingOpacity`) never
+  settles, so `tester.pumpAndSettle()` hangs for the rest of the test once
+  that screen is mounted — including screens pushed on top of it, since a
+  covered-but-not-popped route keeps its `State`/tickers alive. Use
+  `tester.pump()` (optionally with a fixed `Duration`) instead, for as long
+  as that screen stays in the Navigator stack.
+- `Navigator.push`ed routes stay mounted (default `maintainState: true`)
+  even when fully covered by a later push, so `find.text('Continue')` can
+  match more than one widget once you're several screens deep in a pushed
+  flow — either use unique-per-screen text for assertions, or scope/`.last`
+  the finder. Isolating each screen in its own test (pump just that screen
+  under a plain `MaterialApp`, rather than threading through the whole
+  pushed stack) sidesteps this entirely and was the approach used in
+  `test/customer_booking_flow_test.dart`.
 
-Next up per the milestone list: Service Details → Book & Schedule → Review
-& Pay → Track Booking → Rate & Review (the rest of the Customer flow, in
-that order per the handoff), then Splash/Onboarding/Auth as the real entry
-flow ahead of `RoleSelectScreen`, then Provider/Admin screens rebuilt
-against the handoff, then reconnect Firebase.
+Next up: Splash/Onboarding/Auth as the real entry flow ahead of
+`RoleSelectScreen`, then reconnect Firebase. The remaining un-built
+screens across all three roles (Customer's Messages/Chat/Profile/Saved
+Addresses, Admin's Bookings/Providers/More) are lower priority — they're
+`ComingSoonTab` placeholders and not on any role's critical path (booking,
+job-completion, or provider-review respectively).

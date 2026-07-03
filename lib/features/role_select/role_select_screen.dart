@@ -78,14 +78,16 @@ class RoleSelectScreen extends StatelessWidget {
                       const SizedBox(height: 12),
                     ],
                     const SizedBox(height: 12),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: const [
-                        _TrustBadge(icon: LucideIcons.creditCard, label: 'Secure Payments'),
-                        _TrustBadge(icon: LucideIcons.shieldCheck, label: 'Verified Pros'),
-                        _TrustBadge(icon: LucideIcons.headphones, label: '24/7 Support'),
-                        _TrustBadge(icon: LucideIcons.checkCircle2, label: 'Satisfaction'),
-                      ],
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Row(
+                        children: const [
+                          Expanded(child: _TrustBadge(icon: LucideIcons.creditCard, label: 'Secure Payments')),
+                          Expanded(child: _TrustBadge(icon: LucideIcons.shieldCheck, label: 'Verified Pros')),
+                          Expanded(child: _TrustBadge(icon: LucideIcons.headphones, label: '24/7 Support')),
+                          Expanded(child: _TrustBadge(icon: LucideIcons.checkCircle2, label: 'Satisfaction')),
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -132,17 +134,18 @@ class _RoleCard extends StatelessWidget {
             border: _primary ? null : Border.all(color: tokens.line),
             gradient: _primary
                 ? const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Color(0xFF1E3ABA), AppColors.primary],
+                    begin: AppColors.heroGradientBegin,
+                    end: AppColors.heroGradientEnd,
+                    colors: AppColors.heroGradient,
                   )
                 : null,
             boxShadow: _primary
                 ? [
                     BoxShadow(
-                      color: AppColors.primary.withValues(alpha: 0.4),
+                      color: AppColors.primary.withValues(alpha: 0.7),
                       blurRadius: 30,
                       offset: const Offset(0, 14),
+                      spreadRadius: -14,
                     ),
                   ]
                 : null,
@@ -199,28 +202,25 @@ class _TrustBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = context.tokens;
-    return SizedBox(
-      width: 76,
-      child: Column(
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: tokens.card,
-              border: Border.all(color: tokens.line),
-              borderRadius: BorderRadius.circular(13),
-            ),
-            child: Icon(icon, size: 19, color: AppColors.primary),
+    return Column(
+      children: [
+        Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            color: tokens.card,
+            border: Border.all(color: tokens.line),
+            borderRadius: BorderRadius.circular(13),
           ),
-          const SizedBox(height: 7),
-          Text(
-            label,
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: tokens.mut, height: 1.25),
-          ),
-        ],
-      ),
+          child: Icon(icon, size: 19, color: AppColors.primary),
+        ),
+        const SizedBox(height: 7),
+        Text(
+          label,
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: tokens.mut, height: 1.25),
+        ),
+      ],
     );
   }
 }

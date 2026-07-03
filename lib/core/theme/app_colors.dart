@@ -13,4 +13,12 @@ abstract final class AppColors {
   static const Color purple = Color(0xFF9B59B6);
 
   static const Color textOnPrimary = Color(0xFFFFFFFF);
+
+  /// The handoff's hero/CTA gradient is `linear-gradient(120deg, #1E3ABA,
+  /// #2E7DFF)`. These alignments approximate that 120° angle (Flutter has no
+  /// direct angle API) — used by the role-select primary card and the
+  /// customer home promo card, which share this exact gradient.
+  static const List<Color> heroGradient = [Color(0xFF1E3ABA), primary];
+  static const Alignment heroGradientBegin = Alignment(-1, -0.58);
+  static const Alignment heroGradientEnd = Alignment(1, 0.58);
 }

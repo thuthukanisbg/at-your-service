@@ -15,11 +15,10 @@ abstract final class AppTheme {
     disabledBackgroundColor: AppColors.accent.withValues(alpha: 0.4),
     padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
     elevation: 0,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
     textStyle: const TextStyle(
       fontSize: 15,
       fontWeight: FontWeight.w800,
-      letterSpacing: 0.1,
     ),
   );
 
@@ -54,7 +53,7 @@ abstract final class AppTheme {
       titleLarge: base.titleLarge?.copyWith(
         fontSize: 20,
         fontWeight: FontWeight.w800,
-        letterSpacing: -0.3,
+        letterSpacing: -0.4,
         color: tokens.tx,
       ),
       titleMedium: base.titleMedium?.copyWith(
@@ -77,13 +76,11 @@ abstract final class AppTheme {
       labelLarge: base.labelLarge?.copyWith(
         fontSize: 15.5,
         fontWeight: FontWeight.w800,
-        letterSpacing: 0.1,
         color: tokens.tx,
       ),
       labelMedium: base.labelMedium?.copyWith(
         fontSize: 11.5,
         fontWeight: FontWeight.w700,
-        letterSpacing: 0.1,
         color: tokens.mut,
       ),
     );
@@ -154,28 +151,6 @@ abstract final class AppTheme {
         labelStyle: textTheme.labelMedium,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(100)),
-      ),
-      navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: tokens.surface,
-        surfaceTintColor: Colors.transparent,
-        indicatorColor: Colors.transparent,
-        elevation: 0,
-        height: 68,
-        labelTextStyle: WidgetStateProperty.resolveWith((states) {
-          final selected = states.contains(WidgetState.selected);
-          return TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
-            color: selected ? AppColors.primary : tokens.mut,
-          );
-        }),
-        iconTheme: WidgetStateProperty.resolveWith((states) {
-          final selected = states.contains(WidgetState.selected);
-          return IconThemeData(
-            size: 21,
-            color: selected ? AppColors.primary : tokens.mut,
-          );
-        }),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,

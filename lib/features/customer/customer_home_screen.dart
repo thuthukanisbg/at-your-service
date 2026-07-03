@@ -6,6 +6,7 @@ import '../../core/theme/app_tokens.dart';
 import '../../core/utils/currency.dart';
 import '../../models/service_category.dart';
 import 'customer_mock_data.dart';
+import 'service_details_screen.dart';
 
 class CustomerHomeScreen extends StatelessWidget {
   const CustomerHomeScreen({super.key});
@@ -15,6 +16,12 @@ class CustomerHomeScreen extends StatelessWidget {
   void _comingSoon(BuildContext context, String what) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('$what arrives in the next milestone.')),
+    );
+  }
+
+  void _goToService(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const ServiceDetailsScreen()),
     );
   }
 
@@ -44,7 +51,7 @@ class CustomerHomeScreen extends StatelessWidget {
                               'Cape Town, South Africa',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.labelMedium,
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: tokens.mut),
                             ),
                           ),
                           Icon(LucideIcons.chevronDown, size: 13, color: tokens.mut),
@@ -53,7 +60,7 @@ class CustomerHomeScreen extends StatelessWidget {
                       const SizedBox(height: 8),
                       Text(
                         'Hello, Thandi 👋',
-                        style: theme.textTheme.headlineSmall?.copyWith(fontSize: 22),
+                        style: theme.textTheme.headlineSmall?.copyWith(fontSize: 22, letterSpacing: -0.5),
                       ),
                       Text('How can we help you today?', style: theme.textTheme.bodyLarge),
                     ],
@@ -62,7 +69,7 @@ class CustomerHomeScreen extends StatelessWidget {
                 _NotificationButton(onTap: () => _comingSoon(context, 'Notifications')),
               ],
             ),
-            const SizedBox(height: 22),
+            const SizedBox(height: 16),
             Row(
               children: [
                 Expanded(
@@ -86,7 +93,7 @@ class CustomerHomeScreen extends StatelessWidget {
                               'Search for a service…',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.bodyMedium,
+                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: tokens.mut),
                             ),
                           ),
                         ],
@@ -110,7 +117,7 @@ class CustomerHomeScreen extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 22),
             _RowHeader(title: 'Popular Services'),
             const SizedBox(height: 13),
             Row(
@@ -119,7 +126,7 @@ class CustomerHomeScreen extends StatelessWidget {
                   Expanded(
                     child: _CategoryTile(
                       category: category,
-                      onTap: () => _comingSoon(context, 'Service details'),
+                      onTap: () => _goToService(context),
                     ),
                   ),
                   if (category != customerCategories.last) const SizedBox(width: 10),
@@ -127,11 +134,11 @@ class CustomerHomeScreen extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 24),
-            _PromoCard(onTap: () => _comingSoon(context, 'Service details')),
+            _PromoCard(onTap: () => _goToService(context)),
             const SizedBox(height: 24),
             _RowHeader(title: 'Recommended'),
             const SizedBox(height: 13),
-            _RecommendedCard(onTap: () => _comingSoon(context, 'Service details')),
+            _RecommendedCard(onTap: () => _goToService(context)),
           ],
         ),
       ),
@@ -219,7 +226,7 @@ class _CategoryTile extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 4),
+        padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 6),
         decoration: BoxDecoration(
           color: tokens.card,
           border: Border.all(color: tokens.line),
@@ -231,7 +238,7 @@ class _CategoryTile extends StatelessWidget {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: category.tint.withValues(alpha: 0.14),
+                color: category.chipBg,
                 borderRadius: BorderRadius.circular(13),
               ),
               child: Icon(category.icon, size: 21, color: category.tint),
@@ -271,15 +278,16 @@ class _PromoCard extends StatelessWidget {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(18),
           gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF1E3ABA), AppColors.primary],
+            begin: AppColors.heroGradientBegin,
+            end: AppColors.heroGradientEnd,
+            colors: AppColors.heroGradient,
           ),
           boxShadow: [
             BoxShadow(
-              color: AppColors.primary.withValues(alpha: 0.45),
+              color: AppColors.primary.withValues(alpha: 0.6),
               blurRadius: 30,
               offset: const Offset(0, 14),
+              spreadRadius: -12,
             ),
           ],
         ),

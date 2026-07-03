@@ -10,7 +10,7 @@ class MobileFrame extends StatelessWidget {
 
   final Widget child;
 
-  static const double _phoneWidth = 430;
+  static const double _phoneWidth = 392; // handoff's exact phone screen width
   static const double _framingBreakpoint = 560;
 
   @override
@@ -37,7 +37,7 @@ class MobileFrame extends StatelessWidget {
                   ],
                 ),
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(28),
+                  borderRadius: BorderRadius.circular(42), // handoff's phone-screen radius
                   child: child,
                 ),
               ),

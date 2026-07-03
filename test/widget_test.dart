@@ -27,15 +27,20 @@ void main() {
     await tester.tap(find.text('Provider'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Welcome back, Sipho 👋'), findsOneWidget);
+    expect(find.text('My Jobs'), findsOneWidget);
   });
 
   testWidgets('selecting Admin navigates to the admin home screen', (tester) async {
     await tester.pumpWidget(const AtYourServiceApp());
 
+    // At the handoff's exact 392px frame width, the role card descriptions
+    // wrap onto more lines than they used to, pushing Admin (the last card)
+    // below the default test viewport — scroll it into view first.
+    await tester.ensureVisible(find.text('Admin'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Admin'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Marketplace overview'), findsOneWidget);
+    expect(find.text('Dashboard'), findsOneWidget);
   });
 }

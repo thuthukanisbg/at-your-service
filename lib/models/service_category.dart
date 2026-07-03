@@ -6,6 +6,7 @@ class ServiceCategory {
     required this.name,
     required this.icon,
     required this.tint,
+    required this.chipBg,
     required this.price,
   });
 
@@ -13,10 +14,14 @@ class ServiceCategory {
   final String name;
   final IconData icon;
 
-  /// Icon/text color for this category's badge. Background is derived as a
-  /// low-alpha tint of this color (per the design handoff's per-category
-  /// `bg`/`fg` pairs).
+  /// Icon color for this category's badge.
   final Color tint;
+
+  /// Badge background — the handoff specifies this per category rather than
+  /// a uniform tint alpha (e.g. Cleaning/Electrical use a .14 tint, Plumbing/
+  /// Painting use .16), so it's a distinct field rather than derived from
+  /// [tint] with a fixed alpha.
+  final Color chipBg;
 
   /// "From R___" caption shown on the category card.
   final String price;

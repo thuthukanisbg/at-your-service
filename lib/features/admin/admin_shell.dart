@@ -3,7 +3,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 
 import '../../core/widgets/coming_soon_tab.dart';
 import '../../core/widgets/role_nav_shell.dart';
-import 'admin_home_screen.dart';
+import 'admin_dashboard_screen.dart';
 
 class AdminShell extends StatelessWidget {
   const AdminShell({super.key});
@@ -18,7 +18,7 @@ class AdminShell extends StatelessWidget {
           icon: LucideIcons.layoutDashboard,
           selectedIcon: LucideIcons.layoutDashboard,
           label: 'Overview',
-          body: AdminHomeScreen(),
+          body: AdminDashboardScreen(),
         ),
         NavTab(
           icon: LucideIcons.calendar,
