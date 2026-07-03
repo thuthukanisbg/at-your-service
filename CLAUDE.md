@@ -140,9 +140,10 @@ reconnaissance" below.
 Still open: Customer's Messages/Chat/Profile/Saved Addresses
 (`cust_msgs`/`cust_chat`/`cust_profile`/`cust_address`); Admin's
 Bookings/Providers/More tabs beyond Dashboard — all still `ComingSoonTab`
-placeholders, no spec was pulled for them yet. Then the actual Firebase
-reconnect (adding `firebase_core`/`firebase_auth`/`cloud_firestore` and
-replacing mock data with real reads/writes).
+placeholders, no spec was pulled for them yet. Then the rest of the
+Firebase reconnect (adding `firebase_auth`/`cloud_firestore` and replacing
+mock data with real reads/writes — `flutterfire configure` and
+`firebase_core` are already done, see "Next up" at the bottom).
 
 - `lib/core/` — theme (`AppColors` fixed accents, `AppTheme` light/dark
   builder + `AppTheme.amberAction`, `AppTokens` theme-variant surface/text
@@ -397,15 +398,31 @@ Gotchas hit and fixed (still apply going forward):
   and later, `scrollUntilVisible` throwing `Bad state: Too many elements`
   because the outgoing route was still faintly present.
 
-Next up: the actual Firebase reconnect (milestone 7) — adding
-`firebase_core`/`firebase_auth`/`cloud_firestore`, wiring `AuthScreen` to
-real sign-in/sign-up, and replacing mock data with real reads/writes.
-Reconnaissance for this (Firestore collection/document schema mapped from
-the current mock models, a first-draft security-rules file, and a
-per-screen audit of which loading/error/empty states are needed once async
-calls exist) has been done and discussed but not yet implemented — no
-Firebase packages or SDK code exist in the repo yet. The remaining
-un-built screens across all three roles (Customer's Messages/Chat/Profile/
-Saved Addresses, Admin's Bookings/Providers/More) are lower priority —
-they're `ComingSoonTab` placeholders and not on any role's critical path
-(booking, job-completion, or provider-review respectively).
+Next up: the rest of the Firebase reconnect (milestone 7). Already done:
+reconnaissance (Firestore collection/document schema mapped from the
+current mock models, a first-draft security-rules file, and a per-screen
+audit of which loading/error/empty states are needed once async calls
+exist — discussed in-session, not committed as files), and the actual
+`flutterfire configure` against the pre-existing Firebase project
+**`at-your-service-1cb5a`** ("At your Service", under
+thuthukanisbg@gmail.com — found via `firebase projects:list`; the CLIs
+were installed for this: `firebase-tools` via npm into `~/.npm-global`
+(the default global prefix wasn't user-writable; PATH updated in
+`~/.zshrc`), `flutterfire_cli` via `dart pub global activate`, plus the
+`xcodeproj` Ruby gem (`gem install --user-install`) which flutterfire's
+iOS step silently requires — it fails with a raw Ruby LoadError without
+it). That generated `lib/firebase_options.dart`, `firebase.json`,
+`android/app/google-services.json`, `ios/Runner/GoogleService-Info.plist`
+and the google-services Gradle wiring, and `firebase_core` is in pubspec —
+but **nothing calls `Firebase.initializeApp` yet**, so runtime behavior is
+unchanged and everything still runs on mock data. (These config files are
+committed deliberately: Firebase client config is app identifiers, not
+secrets — access control lives in security rules, which are NOT deployed
+yet; deploy rules before writing any real data.) Remaining: add
+`firebase_auth`/`cloud_firestore`, initialize Firebase in `main.dart`,
+wire `AuthScreen` to real sign-in/sign-up, replace mock data with real
+reads/writes, write+deploy the security rules. The remaining un-built
+screens across all three roles (Customer's Messages/Chat/Profile/Saved
+Addresses, Admin's Bookings/Providers/More) are lower priority — they're
+`ComingSoonTab` placeholders and not on any role's critical path (booking,
+job-completion, or provider-review respectively).
