@@ -1,0 +1,70 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() { return request.auth != null; }
+    function uid() { return request.auth.uid; }
+    function myRole() {
+      return get(/databases/$(database)/documents/users/$(uid())).data.role;
+    }
+    function isAdmin() { return isSignedIn() && myRole() == 'admin'; }
+    function isProvider() { return isSignedIn() && myRole() == 'provider'; }
+
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && uid() == userId;
+      // Own-profile edits may never touch role or the backend-owned parts
+      // of providerProfile (stats, verification) — those change only via
+      // admin action or Cloud Functions.
+      allow update: if isSignedIn() && uid() == userId
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.get(['providerProfile', 'stats'], null)
+             == resource.data.get(['providerProfile', 'stats'], null)
+        && request.resource.data.get(['providerProfile', 'verification'], null)
+             == resource.data.get(['providerProfile', 'verification'], null);
+      allow update: if isAdmin();
+    }
+
+    match /serviceCategories/{categoryId} {
+      // Public: browsable before sign-up.
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /services/{serviceId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /bookings/{bookingId} {
+      allow read: if isSignedIn()
+        && (resource.data.customerId == uid()
+            || resource.data.get('providerId', null) == uid()
+            || isAdmin());
+      allow create: if isSignedIn() && request.resource.data.customerId == uid();
+      // A customer may only cancel their own booking.
+      allow update: if isSignedIn()
+        && resource.data.customerId == uid()
+        && request.resource.data.status == 'cancelled';
+      // A provider may update a job assigned to them, or claim an
+      // unassigned one. TODO before real traffic: this claim is a plain
+      // rule check, not a transaction — two providers can race each other;
+      // move the claim into a Cloud Function/transaction.
+      allow update: if isProvider()
+        && (resource.data.get('providerId', null) == uid()
+            || (resource.data.get('providerId', null) == null
+                && request.resource.data.providerId == uid()));
+      allow update: if isAdmin();
+    }
+
+    match /reviews/{reviewId} {
+      allow read: if true;
+      // Only the booking's own customer may review it; reviews are
+      // immutable to their author afterwards (admin-only moderation).
+      allow create: if isSignedIn()
+        && request.resource.data.customerId == uid()
+        && get(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.customerId == uid();
+      allow update, delete: if isAdmin();
+    }
+  }
+}

@@ -413,15 +413,24 @@ were installed for this: `firebase-tools` via npm into `~/.npm-global`
 iOS step silently requires — it fails with a raw Ruby LoadError without
 it). That generated `lib/firebase_options.dart`, `firebase.json`,
 `android/app/google-services.json`, `ios/Runner/GoogleService-Info.plist`
-and the google-services Gradle wiring, and `firebase_core` is in pubspec —
-but **nothing calls `Firebase.initializeApp` yet**, so runtime behavior is
-unchanged and everything still runs on mock data. (These config files are
-committed deliberately: Firebase client config is app identifiers, not
-secrets — access control lives in security rules, which are NOT deployed
-yet; deploy rules before writing any real data.) Remaining: add
-`firebase_auth`/`cloud_firestore`, initialize Firebase in `main.dart`,
-wire `AuthScreen` to real sign-in/sign-up, replace mock data with real
-reads/writes, write+deploy the security rules. The remaining un-built
+and the google-services Gradle wiring. (These config files are committed
+deliberately: Firebase client config is app identifiers, not secrets —
+access control lives in security rules.) Since then the foundation has
+also landed: `firebase_core`/`firebase_auth`/`cloud_firestore` are all in
+pubspec, `main.dart` calls `Firebase.initializeApp` (in `main()`, NOT in
+`AtYourServiceApp` — deliberately, so widget tests that pump the app
+widget directly never need a live Firebase connection), and
+`firestore.rules` (the role-based draft from the recon: users/
+serviceCategories/services/bookings/reviews) is written and **deployed**
+to the project (`firebase deploy --only firestore:rules`; `firebase.json`
+has the firestore section, `.firebaserc` pins the default project so
+`--project` isn't needed). Verified: analyze/tests green and the web app
+boots against the live project with initializeApp succeeding. Known
+rules TODO: the provider job-claim path is a plain rule check, not a
+transaction — racing providers must be handled by a Cloud Function/
+transaction before real traffic. Remaining: wire `AuthScreen` to real
+sign-in/sign-up, replace mock data with real reads/writes (per-screen
+loading/error/empty states from the recon audit). The remaining un-built
 screens across all three roles (Customer's Messages/Chat/Profile/Saved
 Addresses, Admin's Bookings/Providers/More) are lower priority — they're
 `ComingSoonTab` placeholders and not on any role's critical path (booking,
