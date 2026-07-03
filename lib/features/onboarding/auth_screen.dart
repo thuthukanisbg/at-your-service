@@ -1,28 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
+import '../../core/services/auth_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/primary_cta_button.dart';
 import '../role_select/role_select_screen.dart';
-
-class _AuthField {
-  const _AuthField(this.label, this.icon, this.hint);
-  final String label;
-  final IconData icon;
-  final String hint;
-}
-
-const _signInFields = [
-  _AuthField('Email', LucideIcons.mail, 'you@email.co.za'),
-  _AuthField('Password', LucideIcons.lock, '••••••••'),
-];
-
-const _signUpFields = [
-  _AuthField('Full name', LucideIcons.user, 'Thandi Nkosi'),
-  _AuthField('Email', LucideIcons.mail, 'you@email.co.za'),
-  _AuthField('Password', LucideIcons.lock, '••••••••'),
-];
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -35,15 +18,60 @@ class AuthScreen extends StatefulWidget {
 
 class _AuthScreenState extends State<AuthScreen> {
   bool _signIn = true;
+  bool _submitting = false;
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
 
-  void _goToChooser() {
-    Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const RoleSelectScreen()));
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  void _showSnack(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  void _comingSoon(String what) {
+    _showSnack('$what arrives in the next milestone.');
+  }
+
+  Future<void> _submit() async {
+    final name = _nameController.text.trim();
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+    if (email.isEmpty || password.isEmpty || (!_signIn && name.isEmpty)) {
+      _showSnack('Please fill in all fields.');
+      return;
+    }
+    setState(() => _submitting = true);
+    try {
+      if (_signIn) {
+        await AuthService.instance.signIn(email: email, password: password);
+      } else {
+        await AuthService.instance.signUp(name: name, email: email, password: password);
+      }
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const RoleSelectScreen()),
+      );
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      _showSnack(e.message);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      _showSnack('Something went wrong. Please try again.');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final tokens = context.tokens;
-    final fields = _signIn ? _signInFields : _signUpFields;
     return Scaffold(
       body: SafeArea(
         child: ListView(
@@ -90,11 +118,33 @@ class _AuthScreenState extends State<AuthScreen> {
                 ],
               ),
             ),
-            for (final field in fields) _AuthFieldDisplay(field: field),
+            if (!_signIn)
+              _AuthTextField(
+                controller: _nameController,
+                label: 'Full name',
+                icon: LucideIcons.user,
+                hint: 'Thandi Nkosi',
+              ),
+            _AuthTextField(
+              controller: _emailController,
+              label: 'Email',
+              icon: LucideIcons.mail,
+              hint: 'you@email.co.za',
+              keyboardType: TextInputType.emailAddress,
+            ),
+            _AuthTextField(
+              controller: _passwordController,
+              label: 'Password',
+              icon: LucideIcons.lock,
+              hint: '••••••••',
+              obscure: true,
+            ),
             const SizedBox(height: 8),
             PrimaryCtaButton(
-              label: _signIn ? 'Sign In' : 'Create Account',
-              onPressed: _goToChooser,
+              label: _submitting
+                  ? (_signIn ? 'Signing In…' : 'Creating Account…')
+                  : (_signIn ? 'Sign In' : 'Create Account'),
+              onPressed: _submitting ? null : _submit,
             ),
             const SizedBox(height: 18),
             Row(
@@ -110,9 +160,9 @@ class _AuthScreenState extends State<AuthScreen> {
             const SizedBox(height: 18),
             Row(
               children: [
-                Expanded(child: _SocialButton(icon: LucideIcons.mail, label: 'Google', onTap: _goToChooser)),
+                Expanded(child: _SocialButton(icon: LucideIcons.mail, label: 'Google', onTap: () => _comingSoon('Google sign-in'))),
                 const SizedBox(width: 11),
-                Expanded(child: _SocialButton(icon: LucideIcons.smartphone, label: 'Phone', onTap: _goToChooser)),
+                Expanded(child: _SocialButton(icon: LucideIcons.smartphone, label: 'Phone', onTap: () => _comingSoon('Phone sign-in'))),
               ],
             ),
           ],
@@ -155,10 +205,22 @@ class _AuthTab extends StatelessWidget {
   }
 }
 
-class _AuthFieldDisplay extends StatelessWidget {
-  const _AuthFieldDisplay({required this.field});
+class _AuthTextField extends StatelessWidget {
+  const _AuthTextField({
+    required this.controller,
+    required this.label,
+    required this.icon,
+    required this.hint,
+    this.obscure = false,
+    this.keyboardType,
+  });
 
-  final _AuthField field;
+  final TextEditingController controller;
+  final String label;
+  final IconData icon;
+  final String hint;
+  final bool obscure;
+  final TextInputType? keyboardType;
 
   @override
   Widget build(BuildContext context) {
@@ -168,7 +230,7 @@ class _AuthFieldDisplay extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(field.label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: tokens.mut)),
+          Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: tokens.mut)),
           const SizedBox(height: 7),
           Container(
             height: 50,
@@ -180,9 +242,22 @@ class _AuthFieldDisplay extends StatelessWidget {
             ),
             child: Row(
               children: [
-                Icon(field.icon, size: 18, color: tokens.mut),
+                Icon(icon, size: 18, color: tokens.mut),
                 const SizedBox(width: 10),
-                Text(field.hint, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: tokens.mut)),
+                Expanded(
+                  child: TextField(
+                    controller: controller,
+                    obscureText: obscure,
+                    keyboardType: keyboardType,
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: tokens.tx),
+                    decoration: InputDecoration(
+                      isCollapsed: true,
+                      border: InputBorder.none,
+                      hintText: hint,
+                      hintStyle: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: tokens.mut),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),

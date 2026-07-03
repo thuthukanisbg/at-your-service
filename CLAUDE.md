@@ -172,11 +172,22 @@ mock data with real reads/writes — `flutterfire configure` and
   pulsing dot (see the gotchas list below), except permanent instead of
   scoped to one screen — `pushReplacement` actually disposes it once you
   move on, which is also the correct UX (no reason "back" from the role
-  chooser should walk you backwards through auth). Per the handoff's own
-  click-through prototype, Auth's fields are static display (no real
-  `TextField`s — the prototype's own fields have no `onClick` either) and
-  every exit point (CTA, Google, Phone) goes to the same place:
-  `RoleSelectScreen`, now reached at `/chooser` instead of `/`.
+  chooser should walk you backwards through auth). `AuthScreen` is wired to
+  **real Firebase email/password auth** via `AuthService`
+  (`lib/core/services/auth_service.dart`): real `TextField`s (styled to the
+  handoff's static field spec), non-empty validation, a submitting/disabled
+  CTA state, and `FirebaseAuthException` codes mapped to friendly snackbar
+  messages. Sign-up also creates `users/{uid}` in Firestore with
+  `role: null` (the chooser is meant to fill role in later — rules allow
+  setting it only while null). `AuthService.instance` is a plain static
+  that tests override with a per-file `_StubAuthService` — that's what
+  keeps every widget test Firebase-free even though they walk through this
+  screen. Google/Phone buttons are honest "coming soon" snackbars now, NOT
+  the prototype's click-through-to-chooser (that would be an auth bypass);
+  only a successful sign-in/sign-up reaches `RoleSelectScreen` (at
+  `/chooser` instead of `/`). Email/Password provider confirmed enabled on
+  the Firebase project via an Identity Toolkit REST smoke test (throwaway
+  account created + deleted).
 - `lib/features/role_select/` — `RoleSelectScreen` (the handoff's
   "chooser"), rebuilt pixel-accurate to the handoff: amber house-mark logo,
   "I need a service / Customer / ..." card hierarchy (action phrase is the
@@ -260,7 +271,7 @@ Verified with:
 /Users/thuthukaninxumalo/development/flutter/bin/flutter test
 ```
 
-Both pass — 31 tests total: `test/widget_test.dart` (role navigation),
+Both pass — 33 tests total: `test/widget_test.dart` (role navigation),
 `test/mobile_frame_test.dart` (frame width, see below),
 `test/onboarding_flow_test.dart` (Splash/Onboarding/Auth's own internal
 behavior — slide advancement, Skip, Sign In/Sign Up field swap),
@@ -428,9 +439,14 @@ has the firestore section, `.firebaserc` pins the default project so
 boots against the live project with initializeApp succeeding. Known
 rules TODO: the provider job-claim path is a plain rule check, not a
 transaction — racing providers must be handled by a Cloud Function/
-transaction before real traffic. Remaining: wire `AuthScreen` to real
-sign-in/sign-up, replace mock data with real reads/writes (per-screen
-loading/error/empty states from the recon audit). The remaining un-built
+transaction before real traffic. `AuthScreen` is now wired to real
+sign-in/sign-up (see the onboarding bullet above — `AuthService`, users
+doc with `role: null` on sign-up, per-file `_StubAuthService` in tests).
+Remaining: persist the chosen role at `RoleSelectScreen` (fill in the
+null `role` on the users doc — rules already allow the one-time set),
+skip Splash/Auth when already signed in, then replace mock data with real
+reads/writes (per-screen loading/error/empty states from the recon
+audit). The remaining un-built
 screens across all three roles (Customer's Messages/Chat/Profile/Saved
 Addresses, Admin's Bookings/Providers/More) are lower priority — they're
 `ComingSoonTab` placeholders and not on any role's critical path (booking,

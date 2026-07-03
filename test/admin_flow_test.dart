@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
 import 'package:at_your_service/app.dart';
+import 'package:at_your_service/core/services/auth_service.dart';
 import 'package:at_your_service/core/theme/app_theme.dart';
 import 'package:at_your_service/core/widgets/mobile_frame.dart';
 import 'package:at_your_service/features/admin/admin_dashboard_screen.dart';
@@ -33,13 +34,31 @@ Future<void> _skipToChooser(WidgetTester tester) async {
   // smaller pumps reliably do).
   await tester.pump(const Duration(milliseconds: 300));
   await tester.pump(const Duration(milliseconds: 300));
+  // AuthScreen now performs real (test-stubbed) sign-in with non-empty
+  // validation, so credentials must be entered before tapping the CTA.
+  await tester.enterText(find.byType(TextField).at(0), 'test@example.com');
+  await tester.enterText(find.byType(TextField).at(1), 'password123');
   await tester.tap(find.widgetWithText(ElevatedButton, 'Sign In'));
   // Auth/RoleSelect have no repeating animations, so it's safe to fully
   // settle this second transition normally.
   await tester.pumpAndSettle();
 }
 
+/// Succeeds without touching Firebase — AuthScreen's real service needs a
+/// live Firebase app, which widget tests don't have.
+class _StubAuthService extends AuthService {
+  @override
+  Future<void> signIn({required String email, required String password}) async {}
+
+  @override
+  Future<void> signUp({required String name, required String email, required String password}) async {}
+}
+
 void main() {
+  setUp(() {
+    AuthService.instance = _StubAuthService();
+  });
+
   testWidgets('admin dashboard shows stats and pending applicants', (tester) async {
     await tester.pumpWidget(const AtYourServiceApp());
     await _skipToChooser(tester);

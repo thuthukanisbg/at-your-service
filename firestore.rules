@@ -13,11 +13,13 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && uid() == userId;
-      // Own-profile edits may never touch role or the backend-owned parts
-      // of providerProfile (stats, verification) — those change only via
-      // admin action or Cloud Functions.
+      // Own-profile edits: role may be set once (sign-up stores it as null,
+      // the role chooser fills it in) but never changed afterwards; the
+      // backend-owned parts of providerProfile (stats, verification) change
+      // only via admin action or Cloud Functions.
       allow update: if isSignedIn() && uid() == userId
-        && request.resource.data.role == resource.data.role
+        && (request.resource.data.role == resource.data.role
+            || resource.data.role == null)
         && request.resource.data.get(['providerProfile', 'stats'], null)
              == resource.data.get(['providerProfile', 'stats'], null)
         && request.resource.data.get(['providerProfile', 'verification'], null)

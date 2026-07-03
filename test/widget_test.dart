@@ -2,6 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:at_your_service/app.dart';
+import 'package:at_your_service/core/services/auth_service.dart';
+
+/// Succeeds without touching Firebase — AuthScreen's real service needs a
+/// live Firebase app, which widget tests don't have.
+class _StubAuthService extends AuthService {
+  @override
+  Future<void> signIn({required String email, required String password}) async {}
+
+  @override
+  Future<void> signUp({required String name, required String email, required String password}) async {}
+}
 
 /// Walks from the app's real entry point (Splash) to the role chooser via
 /// the shortest path ("I already have an account" -> Sign In), so every
@@ -23,6 +34,10 @@ Future<void> _skipToChooser(WidgetTester tester) async {
   // smaller pumps reliably do).
   await tester.pump(const Duration(milliseconds: 300));
   await tester.pump(const Duration(milliseconds: 300));
+  // AuthScreen now performs real (test-stubbed) sign-in with non-empty
+  // validation, so credentials must be entered before tapping the CTA.
+  await tester.enterText(find.byType(TextField).at(0), 'test@example.com');
+  await tester.enterText(find.byType(TextField).at(1), 'password123');
   await tester.tap(find.widgetWithText(ElevatedButton, 'Sign In'));
   // Auth/RoleSelect have no repeating animations, so it's safe to fully
   // settle this second transition normally.
@@ -30,6 +45,10 @@ Future<void> _skipToChooser(WidgetTester tester) async {
 }
 
 void main() {
+  setUp(() {
+    AuthService.instance = _StubAuthService();
+  });
+
   testWidgets('role select screen lists all three roles', (tester) async {
     await tester.pumpWidget(const AtYourServiceApp());
     await _skipToChooser(tester);
