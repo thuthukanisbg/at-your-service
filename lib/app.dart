@@ -4,8 +4,8 @@ import 'core/theme/app_theme.dart';
 import 'core/widgets/mobile_frame.dart';
 import 'features/admin/admin_shell.dart';
 import 'features/customer/customer_shell.dart';
+import 'features/onboarding/splash_screen.dart';
 import 'features/provider/provider_shell.dart';
-import 'features/role_select/role_select_screen.dart';
 
 class AtYourServiceApp extends StatelessWidget {
   const AtYourServiceApp({super.key});
@@ -19,9 +19,9 @@ class AtYourServiceApp extends StatelessWidget {
       darkTheme: AppTheme.dark(),
       themeMode: ThemeMode.dark,
       builder: (context, child) => MobileFrame(child: child!),
-      initialRoute: RoleSelectScreen.routeName,
+      initialRoute: SplashScreen.routeName,
       routes: {
-        RoleSelectScreen.routeName: (_) => const RoleSelectScreen(),
+        SplashScreen.routeName: (_) => const SplashScreen(),
         CustomerShell.routeName: (_) => const CustomerShell(),
         ProviderShell.routeName: (_) => const ProviderShell(),
         AdminShell.routeName: (_) => const AdminShell(),

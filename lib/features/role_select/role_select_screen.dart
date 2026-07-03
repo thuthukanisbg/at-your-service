@@ -14,7 +14,7 @@ import '../provider/provider_shell.dart';
 class RoleSelectScreen extends StatelessWidget {
   const RoleSelectScreen({super.key});
 
-  static const routeName = '/';
+  static const routeName = '/chooser';
 
   void _selectRole(BuildContext context, UserRole role) {
     final routeName = switch (role) {

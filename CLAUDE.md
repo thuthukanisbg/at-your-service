@@ -132,11 +132,17 @@ chubby" next to the handoff. It found and fixed a real, high-impact bug
 in turn exposed several pre-existing overflow bugs that the too-wide frame
 had been masking.
 
-Still open: Splash/Onboarding/Auth as the real entry flow ahead of
-`RoleSelectScreen`; Customer's Messages/Chat/Profile/Saved Addresses
+**Splash/Onboarding/Auth** (the real entry flow ahead of `RoleSelectScreen`)
+is now built too — see `lib/features/onboarding/` below. Firebase
+reconnaissance (no SDK code yet) has also been done — see "Firebase
+reconnaissance" below.
+
+Still open: Customer's Messages/Chat/Profile/Saved Addresses
 (`cust_msgs`/`cust_chat`/`cust_profile`/`cust_address`); Admin's
 Bookings/Providers/More tabs beyond Dashboard — all still `ComingSoonTab`
-placeholders, no spec was pulled for them yet. Then Firebase reconnect.
+placeholders, no spec was pulled for them yet. Then the actual Firebase
+reconnect (adding `firebase_core`/`firebase_auth`/`cloud_firestore` and
+replacing mock data with real reads/writes).
 
 - `lib/core/` — theme (`AppColors` fixed accents, `AppTheme` light/dark
   builder + `AppTheme.amberAction`, `AppTokens` theme-variant surface/text
@@ -150,6 +156,26 @@ placeholders, no spec was pulled for them yet. Then Firebase reconnect.
   `JobRequest`/`ProviderApplication` were deleted once the Provider/Admin
   rebuilds made them unused — don't recreate them without checking they're
   actually still needed first.
+- `lib/features/onboarding/` — the real entry flow, now ahead of
+  `RoleSelectScreen`: `SplashScreen` (`app.dart`'s `initialRoute`; amber
+  house-mark logo with the handoff's `floaty` bob animation, diagonal navy
+  gradient background, "Get Started" / "I already have an account") →
+  `OnboardingScreen` (3-slide carousel, local `_step` state, "Skip" or
+  "Next"/"Get Started" on the last slide) → `AuthScreen` (Sign In/Sign Up
+  segmented toggle, local `_signIn` state; the field list swaps per mode —
+  2 fields for sign in, 3 for sign up). All three transitions use
+  `Navigator.pushReplacement`, not `push` — `SplashScreen`'s logo animation
+  repeats forever, so leaving it `push`ed (and thus still mounted, ticking,
+  underneath every later screen) would be the same
+  `tester.pumpAndSettle()`-hangs-forever hazard as `TrackBookingScreen`'s
+  pulsing dot (see the gotchas list below), except permanent instead of
+  scoped to one screen — `pushReplacement` actually disposes it once you
+  move on, which is also the correct UX (no reason "back" from the role
+  chooser should walk you backwards through auth). Per the handoff's own
+  click-through prototype, Auth's fields are static display (no real
+  `TextField`s — the prototype's own fields have no `onClick` either) and
+  every exit point (CTA, Google, Phone) goes to the same place:
+  `RoleSelectScreen`, now reached at `/chooser` instead of `/`.
 - `lib/features/role_select/` — `RoleSelectScreen` (the handoff's
   "chooser"), rebuilt pixel-accurate to the handoff: amber house-mark logo,
   "I need a service / Customer / ..." card hierarchy (action phrase is the
@@ -233,20 +259,29 @@ Verified with:
 /Users/thuthukaninxumalo/development/flutter/bin/flutter test
 ```
 
-Both pass — 25 tests total: `test/widget_test.dart` (role navigation),
+Both pass — 31 tests total: `test/widget_test.dart` (role navigation),
 `test/mobile_frame_test.dart` (frame width, see below),
+`test/onboarding_flow_test.dart` (Splash/Onboarding/Auth's own internal
+behavior — slide advancement, Skip, Sign In/Sign Up field swap),
 `test/customer_booking_flow_test.dart`, `test/provider_flow_test.dart`,
 `test/admin_flow_test.dart`, `test/verify_flow_test.dart` (one file per
 role flow, each walking its full screen-to-screen chain, not just smoke
-tests). None of this was manually screenshotted in-browser in the sessions
-that built it (computer-use/screen access was unavailable throughout) —
-fidelity was instead verified by direct line-by-line comparison against
-the handoff's literal HTML/CSS, not the README's paraphrased descriptions,
-which occasionally drift from the literal markup (e.g. the README's
-"What's included" checklist has no such heading in the actual
-`cust_service` markup — the screen correctly omits it). Screenshot-verify
-the whole app in-browser before calling any of this final — an earlier
-session did screenshot the pre-fidelity-fix versions of
+tests). Since the entry flow is now Splash → Onboarding → Auth →
+`RoleSelectScreen` rather than `RoleSelectScreen` being the app's initial
+route, every test file that used to pump `AtYourServiceApp` and tap a role
+card directly now has to walk through the entry flow first via a shared
+`_skipToChooser` helper (duplicated per file, matching this codebase's
+existing per-file `_harness` convention rather than a shared test-utils
+file) — see the `pushReplacement`/pump-timing gotcha below. None of this
+was manually screenshotted in-browser in the sessions that built it
+(computer-use/screen access was unavailable throughout) — fidelity was
+instead verified by direct line-by-line comparison against the handoff's
+literal HTML/CSS, not the README's paraphrased descriptions, which
+occasionally drift from the literal markup (e.g. the README's "What's
+included" checklist has no such heading in the actual `cust_service`
+markup — the screen correctly omits it). Screenshot-verify the whole app
+in-browser before calling any of this final — an earlier session did
+screenshot the pre-fidelity-fix versions of
 `RoleSelectScreen`/`CustomerHomeScreen` only, nothing since.
 
 ### Design tightening pass ("chubby" feedback)
@@ -350,10 +385,27 @@ Gotchas hit and fixed (still apply going forward):
   under a plain `MaterialApp`, rather than threading through the whole
   pushed stack) sidesteps this entirely and was the approach used in
   `test/customer_booking_flow_test.dart`.
+- Driving a `pushReplacement` transition in a widget test with a single
+  large `tester.pump(duration)` call is not reliable even when `duration`
+  comfortably exceeds the transition's length — the animation's completion
+  callbacks (which actually remove the old route from the tree) don't
+  always get a chance to run in one jump. Use two smaller sequential
+  `pump()` calls instead (e.g. `pump(300ms)` twice rather than
+  `pump(600ms)` once) — hit this building the Splash → Auth →
+  `RoleSelectScreen` entry flow's test helper, where the symptom was
+  `find`ers for the destination screen's content returning zero matches,
+  and later, `scrollUntilVisible` throwing `Bad state: Too many elements`
+  because the outgoing route was still faintly present.
 
-Next up: Splash/Onboarding/Auth as the real entry flow ahead of
-`RoleSelectScreen`, then reconnect Firebase. The remaining un-built
-screens across all three roles (Customer's Messages/Chat/Profile/Saved
-Addresses, Admin's Bookings/Providers/More) are lower priority — they're
-`ComingSoonTab` placeholders and not on any role's critical path (booking,
-job-completion, or provider-review respectively).
+Next up: the actual Firebase reconnect (milestone 7) — adding
+`firebase_core`/`firebase_auth`/`cloud_firestore`, wiring `AuthScreen` to
+real sign-in/sign-up, and replacing mock data with real reads/writes.
+Reconnaissance for this (Firestore collection/document schema mapped from
+the current mock models, a first-draft security-rules file, and a
+per-screen audit of which loading/error/empty states are needed once async
+calls exist) has been done and discussed but not yet implemented — no
+Firebase packages or SDK code exist in the repo yet. The remaining
+un-built screens across all three roles (Customer's Messages/Chat/Profile/
+Saved Addresses, Admin's Bookings/Providers/More) are lower priority —
+they're `ComingSoonTab` placeholders and not on any role's critical path
+(booking, job-completion, or provider-review respectively).

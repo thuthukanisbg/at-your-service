@@ -1,10 +1,38 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:at_your_service/app.dart';
 
+/// Walks from the app's real entry point (Splash) to the role chooser via
+/// the shortest path ("I already have an account" -> Sign In), so every
+/// other test doesn't have to re-navigate the entry flow to reach the
+/// screen it actually wants to exercise.
+///
+/// SplashScreen's floaty logo animation repeats forever, and it stays
+/// mounted underneath the outgoing page-transition animation for a few
+/// hundred milliseconds after `pushReplacement` — so `pumpAndSettle()`
+/// would hang here the same way it does on TrackBookingScreen's pulsing
+/// dot. Pump fixed durations instead until Splash/Auth are fully replaced.
+Future<void> _skipToChooser(WidgetTester tester) async {
+  await tester.pump();
+  await tester.tap(find.text('I already have an account'));
+  // Splash's floaty logo animation repeats forever, so pumpAndSettle() would
+  // hang while it's still mounted mid-transition — pump manually until it's
+  // fully replaced by AuthScreen instead (a single large pump() doesn't give
+  // the transition's completion callbacks a chance to run either; two
+  // smaller pumps reliably do).
+  await tester.pump(const Duration(milliseconds: 300));
+  await tester.pump(const Duration(milliseconds: 300));
+  await tester.tap(find.widgetWithText(ElevatedButton, 'Sign In'));
+  // Auth/RoleSelect have no repeating animations, so it's safe to fully
+  // settle this second transition normally.
+  await tester.pumpAndSettle();
+}
+
 void main() {
   testWidgets('role select screen lists all three roles', (tester) async {
     await tester.pumpWidget(const AtYourServiceApp());
+    await _skipToChooser(tester);
 
     expect(find.text('At Your Service'), findsOneWidget);
     expect(find.text('Customer'), findsOneWidget);
@@ -14,6 +42,7 @@ void main() {
 
   testWidgets('selecting Customer navigates to the customer home screen', (tester) async {
     await tester.pumpWidget(const AtYourServiceApp());
+    await _skipToChooser(tester);
 
     await tester.tap(find.text('Customer'));
     await tester.pumpAndSettle();
@@ -23,6 +52,7 @@ void main() {
 
   testWidgets('selecting Provider navigates to the provider home screen', (tester) async {
     await tester.pumpWidget(const AtYourServiceApp());
+    await _skipToChooser(tester);
 
     await tester.tap(find.text('Provider'));
     await tester.pumpAndSettle();
@@ -32,6 +62,7 @@ void main() {
 
   testWidgets('selecting Admin navigates to the admin home screen', (tester) async {
     await tester.pumpWidget(const AtYourServiceApp());
+    await _skipToChooser(tester);
 
     // At the handoff's exact 392px frame width, the role card descriptions
     // wrap onto more lines than they used to, pushing Admin (the last card)
