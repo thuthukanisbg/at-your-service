@@ -8,6 +8,7 @@ import 'package:at_your_service/core/theme/app_colors.dart';
 import 'package:at_your_service/core/theme/app_theme.dart';
 import 'package:at_your_service/core/widgets/mobile_frame.dart';
 import 'package:at_your_service/features/customer/book_schedule_screen.dart';
+import 'package:at_your_service/features/customer/booking_service.dart';
 import 'package:at_your_service/features/customer/rate_review_screen.dart';
 import 'package:at_your_service/features/customer/review_pay_screen.dart';
 import 'package:at_your_service/features/customer/service_details_screen.dart';
@@ -63,9 +64,23 @@ class _StubAuthService extends AuthService {
   Future<void> signUp({required String name, required String email, required String password}) async {}
 }
 
+/// Succeeds without touching Firebase — real booking creation needs a live
+/// Firebase app, which widget tests don't have.
+class _StubBookingService extends BookingService {
+  @override
+  Future<String> createBooking({
+    required String? serviceId,
+    required String serviceName,
+    required num price,
+    required DateTime scheduledFor,
+    String? notes,
+  }) async => 'test-booking-id';
+}
+
 void main() {
   setUp(() {
     AuthService.instance = _StubAuthService();
+    BookingService.instance = _StubBookingService();
   });
 
   testWidgets('customer home Recommended card opens Service Details', (tester) async {
@@ -82,8 +97,27 @@ void main() {
     expect(find.text('Kitchen deep clean'), findsOneWidget);
   });
 
+  testWidgets('Messages tab loads gracefully without a live Firebase app', (tester) async {
+    await tester.pumpWidget(const AtYourServiceApp());
+    await _skipToChooser(tester);
+    await tester.tap(find.text('Customer'));
+    await tester.pumpAndSettle();
+
+    // Tap by icon, not text: 'Messages' is both the bottom-nav label and
+    // could collide with other mounted-but-offstage tab content (IndexedStack
+    // keeps every tab's body built, not just the visible one).
+    await tester.tap(find.byIcon(LucideIcons.messageCircle));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No conversations yet.'), findsOneWidget);
+  });
+
   testWidgets('Service Details Continue opens Book & Schedule', (tester) async {
     await tester.pumpWidget(_harness(const ServiceDetailsScreen()));
+    // ServiceDetailsScreen now fetches its data (falls back to mock data
+    // here, since tests have no live Firebase app) — settle past the
+    // loading state before asserting on content.
+    await tester.pumpAndSettle();
 
     expect(find.text('From R600'), findsOneWidget);
 
@@ -97,7 +131,7 @@ void main() {
   });
 
   testWidgets('Book & Schedule carries the selected date/time into Review & Pay', (tester) async {
-    await tester.pumpWidget(_harness(const BookScheduleScreen()));
+    await tester.pumpWidget(_harness(const BookScheduleScreen(serviceName: 'Deep House Cleaning', price: 600)));
 
     await tester.tap(find.text('22'));
     await tester.pump();
@@ -112,7 +146,9 @@ void main() {
   });
 
   testWidgets('Review & Pay Confirm & Pay opens Track Booking', (tester) async {
-    await tester.pumpWidget(_harness(const ReviewPayScreen(selectedDate: '21 May', selectedTime: '10:00 AM')));
+    await tester.pumpWidget(
+      _harness(const ReviewPayScreen(selectedDate: '21 May', selectedTime: '10:00 AM', serviceName: 'Deep House Cleaning', price: 600)),
+    );
 
     expect(find.text('R600'), findsWidgets);
 
@@ -124,7 +160,12 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
 
     expect(find.text('My Booking'), findsOneWidget);
-    expect(find.text('Sipho M.'), findsOneWidget);
+    // A freshly created (stubbed) booking has no provider assigned yet, so
+    // this should show the honest "waiting" state, not the demo's fake
+    // "Sipho M." — that fallback only applies when TrackBookingScreen is
+    // reached with no real booking at all.
+    expect(find.text('Waiting for a provider'), findsOneWidget);
+    expect(find.text('Sipho M.'), findsNothing);
   });
 
   testWidgets('Track Booking Mark as complete opens Rate & Review', (tester) async {
@@ -139,6 +180,29 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
 
     expect(find.text('Rate & Review'), findsOneWidget);
+  });
+
+  testWidgets('Track Booking Report a problem opens the dispute filing screen on a real booking', (tester) async {
+    // Only real bookings (bookingId/customerId/providerId all set) show the
+    // "Report a problem" action — the pure-demo entry point (no constructor
+    // params) has no real booking to attach a report to.
+    await tester.pumpWidget(_harness(const TrackBookingScreen(
+      bookingId: 'booking-1',
+      customerId: 'customer-1',
+      providerId: 'provider-1',
+      serviceName: 'Deep House Cleaning',
+      otherPartyName: 'Sipho M.',
+    )));
+    await tester.pump();
+
+    await tester.scrollUntilVisible(find.text('Report a problem'), 300, scrollable: find.byType(Scrollable));
+    await tester.tap(find.text('Report a problem'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Report a Problem'), findsOneWidget);
+    expect(find.text('Deep House Cleaning'), findsOneWidget);
+    // Priority defaults to Medium.
+    expect(find.text('Medium'), findsOneWidget);
   });
 
   testWidgets('Rate & Review star selection and Submit pops back to the caller', (tester) async {

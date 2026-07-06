@@ -4,6 +4,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../models/admin_applicant.dart';
+import 'admin_dashboard_service.dart';
 import 'admin_mock_data.dart';
 import 'admin_review_screen.dart';
 
@@ -15,14 +16,36 @@ class AdminDashboardScreen extends StatefulWidget {
 }
 
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
-  final List<AdminApplicant> _pending = List.of(initialPendingApplicants);
+  late final Future<List<AdminStat>> _statsFuture = fetchAdminStats();
+
+  // Not a FutureBuilder like _statsFuture: this list is mutated locally
+  // (approve/reject removes an entry), so it's loaded once into State
+  // rather than re-derived from a snapshot on every rebuild.
+  List<AdminApplicant>? _pending;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadApplicants();
+  }
+
+  Future<void> _loadApplicants() async {
+    List<AdminApplicant> applicants;
+    try {
+      applicants = await fetchPendingApplicants();
+    } catch (_) {
+      applicants = List.of(initialPendingApplicants);
+    }
+    if (!mounted) return;
+    setState(() => _pending = applicants);
+  }
 
   Future<void> _review(AdminApplicant applicant) async {
     final decision = await Navigator.of(context).push<bool>(
       MaterialPageRoute(builder: (_) => AdminReviewScreen(applicant: applicant)),
     );
     if (decision != null) {
-      setState(() => _pending.remove(applicant));
+      setState(() => _pending?.remove(applicant));
     }
   }
 
@@ -69,13 +92,25 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             ),
             Padding(
               padding: const EdgeInsets.only(bottom: 18),
-              child: Row(
-                children: [
-                  for (var i = 0; i < adminStats.length; i++) ...[
-                    Expanded(child: _StatCard(stat: adminStats[i])),
-                    if (i != adminStats.length - 1) const SizedBox(width: 9),
-                  ],
-                ],
+              child: FutureBuilder<List<AdminStat>>(
+                future: _statsFuture,
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData && !snapshot.hasError) {
+                    return const SizedBox(
+                      height: 76,
+                      child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
+                    );
+                  }
+                  final stats = snapshot.hasError ? adminStats : snapshot.data!;
+                  return Row(
+                    children: [
+                      for (var i = 0; i < stats.length; i++) ...[
+                        Expanded(child: _StatCard(stat: stats[i])),
+                        if (i != stats.length - 1) const SizedBox(width: 9),
+                      ],
+                    ],
+                  );
+                },
               ),
             ),
             Container(
@@ -135,12 +170,28 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text('Pending approvals', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: tokens.tx)),
-                  Text('${_pending.length} new', style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.primary)),
+                  Text('${_pending?.length ?? 0} new', style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.primary)),
                 ],
               ),
             ),
-            for (final applicant in _pending)
-              _PendingApplicantCard(applicant: applicant, onTap: () => _review(applicant)),
+            if (_pending == null)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
+              )
+            else if (_pending!.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: Center(
+                  child: Text(
+                    'No pending applications.',
+                    style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: tokens.mut),
+                  ),
+                ),
+              )
+            else
+              for (final applicant in _pending!)
+                _PendingApplicantCard(applicant: applicant, onTap: () => _review(applicant)),
           ],
         ),
       ),
@@ -171,10 +222,11 @@ class _StatCard extends StatelessWidget {
             padding: const EdgeInsets.only(top: 3),
             child: Text(stat.label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: tokens.mut)),
           ),
-          Padding(
-            padding: const EdgeInsets.only(top: 5),
-            child: Text(stat.delta, style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: AppColors.success)),
-          ),
+          if (stat.delta != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 5),
+              child: Text(stat.delta!, style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: AppColors.success)),
+            ),
         ],
       ),
     );

@@ -7,7 +7,7 @@ class ServiceCategory {
     required this.icon,
     required this.tint,
     required this.chipBg,
-    required this.price,
+    this.price,
   });
 
   final String id;
@@ -23,6 +23,8 @@ class ServiceCategory {
   /// [tint] with a fixed alpha.
   final Color chipBg;
 
-  /// "From R___" caption shown on the category card.
-  final String price;
+  /// "From R___" caption shown on the category card. Null when the source
+  /// data has no price for this category (e.g. real Firestore
+  /// serviceCategories docs don't carry one — price lives per-service).
+  final String? price;
 }

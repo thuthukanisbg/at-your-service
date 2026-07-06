@@ -5,23 +5,148 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/utils/currency.dart';
 import '../../models/service_category.dart';
+import 'customer_categories_service.dart';
 import 'customer_mock_data.dart';
+import 'customer_notifications_screen.dart';
+import 'customer_notifications_service.dart';
+import 'customer_search_screen.dart';
+import 'customer_services_list_screen.dart';
 import 'service_details_screen.dart';
 
-class CustomerHomeScreen extends StatelessWidget {
+/// Static list — there's no "cities" collection in Firestore to fetch from,
+/// and services aren't location-scoped in the real data (no city field on
+/// any `services` doc), so picking one only changes the displayed label,
+/// not what's shown below it. Matches the pill's own existing static text.
+const _availableLocations = [
+  'Cape Town, South Africa',
+  'Johannesburg, South Africa',
+  'Durban, South Africa',
+  'Pretoria, South Africa',
+  'Port Elizabeth, South Africa',
+  'Bloemfontein, South Africa',
+];
+
+class CustomerHomeScreen extends StatefulWidget {
   const CustomerHomeScreen({super.key});
 
   static const routeName = '/customer';
 
-  void _comingSoon(BuildContext context, String what) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$what arrives in the next milestone.')),
+  @override
+  State<CustomerHomeScreen> createState() => _CustomerHomeScreenState();
+}
+
+class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
+  late final Future<List<ServiceCategory>> _categoriesFuture = fetchActiveServiceCategories();
+  late final Future<bool> _hasUnreadFuture =
+      fetchMyNotifications().then((list) => list.any((n) => !n.read)).catchError((_) => false);
+  String _location = _availableLocations.first;
+
+  Future<void> _openLocationPicker(BuildContext context) async {
+    final tokens = context.tokens;
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: tokens.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+                  child: Text(
+                    'Choose your location',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: tokens.tx),
+                  ),
+                ),
+                for (final location in _availableLocations)
+                  ListTile(
+                    leading: Icon(
+                      LucideIcons.mapPin,
+                      size: 20,
+                      color: location == _location ? AppColors.primary : tokens.mut,
+                    ),
+                    title: Text(location, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: tokens.tx)),
+                    trailing: location == _location ? const Icon(LucideIcons.check, size: 18, color: AppColors.primary) : null,
+                    onTap: () => Navigator.of(sheetContext).pop(location),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (selected != null && mounted) {
+      setState(() => _location = selected);
+    }
+  }
+
+  void _openServicesList(BuildContext context, String title) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => CustomerServicesListScreen(title: title)),
     );
   }
 
   void _goToService(BuildContext context) {
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const ServiceDetailsScreen()),
+    );
+  }
+
+  void _openNotifications(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const CustomerNotificationsScreen()),
+    );
+  }
+
+  void _openSearch(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const CustomerSearchScreen()),
+    );
+  }
+
+  Future<void> _openFilters(BuildContext context) async {
+    final categories = await _categoriesFuture.catchError((_) => customerCategories);
+    if (!context.mounted) return;
+    final tokens = context.tokens;
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: tokens.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+                  child: Text(
+                    'Filter by category',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: tokens.tx),
+                  ),
+                ),
+                for (final category in categories)
+                  ListTile(
+                    leading: Icon(category.icon, size: 20, color: category.tint),
+                    title: Text(category.name, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: tokens.tx)),
+                    onTap: () {
+                      Navigator.of(sheetContext).pop();
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => CustomerSearchScreen(initialCategoryId: category.id, initialCategoryName: category.name),
+                        ),
+                      );
+                    },
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -41,21 +166,25 @@ class CustomerHomeScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(LucideIcons.mapPin, size: 13, color: AppColors.primary),
-                          const SizedBox(width: 5),
-                          Flexible(
-                            child: Text(
-                              'Cape Town, South Africa',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: tokens.mut),
+                      InkWell(
+                        onTap: () => _openLocationPicker(context),
+                        borderRadius: BorderRadius.circular(8),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(LucideIcons.mapPin, size: 13, color: AppColors.primary),
+                            const SizedBox(width: 5),
+                            Flexible(
+                              child: Text(
+                                _location,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: tokens.mut),
+                              ),
                             ),
-                          ),
-                          Icon(LucideIcons.chevronDown, size: 13, color: tokens.mut),
-                        ],
+                            Icon(LucideIcons.chevronDown, size: 13, color: tokens.mut),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 8),
                       Text(
@@ -66,7 +195,13 @@ class CustomerHomeScreen extends StatelessWidget {
                     ],
                   ),
                 ),
-                _NotificationButton(onTap: () => _comingSoon(context, 'Notifications')),
+                FutureBuilder<bool>(
+                  future: _hasUnreadFuture,
+                  builder: (context, snapshot) => _NotificationButton(
+                    hasUnread: snapshot.data ?? false,
+                    onTap: () => _openNotifications(context),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 16),
@@ -74,7 +209,7 @@ class CustomerHomeScreen extends StatelessWidget {
               children: [
                 Expanded(
                   child: InkWell(
-                    onTap: () => _comingSoon(context, 'Search'),
+                    onTap: () => _openSearch(context),
                     borderRadius: BorderRadius.circular(14),
                     child: Container(
                       height: 48,
@@ -103,7 +238,7 @@ class CustomerHomeScreen extends StatelessWidget {
                 ),
                 const SizedBox(width: 10),
                 InkWell(
-                  onTap: () => _comingSoon(context, 'Filters'),
+                  onTap: () => _openFilters(context),
                   borderRadius: BorderRadius.circular(14),
                   child: Container(
                     height: 48,
@@ -118,25 +253,37 @@ class CustomerHomeScreen extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 22),
-            _RowHeader(title: 'Popular Services'),
+            _RowHeader(title: 'Popular Services', onViewAll: () => _openServicesList(context, 'Popular Services')),
             const SizedBox(height: 13),
-            Row(
-              children: [
-                for (final category in customerCategories) ...[
-                  Expanded(
-                    child: _CategoryTile(
-                      category: category,
-                      onTap: () => _goToService(context),
-                    ),
-                  ),
-                  if (category != customerCategories.last) const SizedBox(width: 10),
-                ],
-              ],
+            FutureBuilder<List<ServiceCategory>>(
+              future: _categoriesFuture,
+              builder: (context, snapshot) {
+                if (!snapshot.hasData && !snapshot.hasError) {
+                  return const SizedBox(
+                    height: 96,
+                    child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
+                  );
+                }
+                final categories = snapshot.hasError ? customerCategories : snapshot.data!;
+                return Row(
+                  children: [
+                    for (final category in categories) ...[
+                      Expanded(
+                        child: _CategoryTile(
+                          category: category,
+                          onTap: () => _goToService(context),
+                        ),
+                      ),
+                      if (category != categories.last) const SizedBox(width: 10),
+                    ],
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 24),
             _PromoCard(onTap: () => _goToService(context)),
             const SizedBox(height: 24),
-            _RowHeader(title: 'Recommended'),
+            _RowHeader(title: 'Recommended', onViewAll: () => _openServicesList(context, 'Recommended')),
             const SizedBox(height: 13),
             _RecommendedCard(onTap: () => _goToService(context)),
           ],
@@ -147,9 +294,10 @@ class CustomerHomeScreen extends StatelessWidget {
 }
 
 class _NotificationButton extends StatelessWidget {
-  const _NotificationButton({required this.onTap});
+  const _NotificationButton({required this.onTap, required this.hasUnread});
 
   final VoidCallback onTap;
+  final bool hasUnread;
 
   @override
   Widget build(BuildContext context) {
@@ -169,15 +317,16 @@ class _NotificationButton extends StatelessWidget {
           alignment: Alignment.center,
           children: [
             Icon(LucideIcons.bell, size: 19, color: tokens.tx),
-            Positioned(
-              top: 9,
-              right: 10,
-              child: Container(
-                width: 7,
-                height: 7,
-                decoration: const BoxDecoration(color: AppColors.danger, shape: BoxShape.circle),
+            if (hasUnread)
+              Positioned(
+                top: 9,
+                right: 10,
+                child: Container(
+                  width: 7,
+                  height: 7,
+                  decoration: const BoxDecoration(color: AppColors.danger, shape: BoxShape.circle),
+                ),
               ),
-            ),
           ],
         ),
       ),
@@ -186,9 +335,10 @@ class _NotificationButton extends StatelessWidget {
 }
 
 class _RowHeader extends StatelessWidget {
-  const _RowHeader({required this.title});
+  const _RowHeader({required this.title, required this.onViewAll});
 
   final String title;
+  final VoidCallback onViewAll;
 
   @override
   Widget build(BuildContext context) {
@@ -204,9 +354,12 @@ class _RowHeader extends StatelessWidget {
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: tokens.tx),
           ),
         ),
-        const Text(
-          'View all',
-          style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.primary),
+        InkWell(
+          onTap: onViewAll,
+          child: const Text(
+            'View all',
+            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.primary),
+          ),
         ),
       ],
     );
@@ -250,12 +403,13 @@ class _CategoryTile extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: tokens.tx),
             ),
-            Text(
-              'From ${category.price}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w600, color: tokens.mut),
-            ),
+            if (category.price != null)
+              Text(
+                'From ${category.price}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w600, color: tokens.mut),
+              ),
           ],
         ),
       ),

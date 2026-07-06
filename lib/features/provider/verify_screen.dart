@@ -6,10 +6,15 @@ import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/primary_cta_button.dart';
 
 class _VerifyStepDef {
-  const _VerifyStepDef(this.title, this.description, this.icon);
+  const _VerifyStepDef(this.title, this.description, this.icon, {this.selfAttestable = false});
   final String title;
   final String description;
   final IconData icon;
+
+  /// True for steps the provider submits themselves (their own info/
+  /// documents) — false for steps only an external check can resolve (ID
+  /// scan, background screening), which have no tappable action here.
+  final bool selfAttestable;
 }
 
 const _steps = [
@@ -17,8 +22,8 @@ const _steps = [
   _VerifyStepDef('Selfie Match', 'Face verification for safety', LucideIcons.smile),
   _VerifyStepDef('Proof of Address', 'Verify residential address', LucideIcons.home),
   _VerifyStepDef('Background Check', 'Criminal record screening', LucideIcons.fileSearch),
-  _VerifyStepDef('Skills & Experience', 'Certifications & qualifications', LucideIcons.award),
-  _VerifyStepDef('References', 'Customer & employer references', LucideIcons.users),
+  _VerifyStepDef('Skills & Experience', 'Certifications & qualifications', LucideIcons.award, selfAttestable: true),
+  _VerifyStepDef('References', 'Customer & employer references', LucideIcons.users, selfAttestable: true),
   _VerifyStepDef('Approved', 'Verified & ready to work', LucideIcons.badgeCheck),
 ];
 
@@ -33,6 +38,19 @@ class _VerifyScreenState extends State<VerifyScreen> {
   int _verifyStep = 4; // matches the handoff's initial demo state
 
   bool get _isDone => _verifyStep >= _steps.length;
+
+  void _advance() {
+    setState(() {
+      var next = _verifyStep + 1;
+      // 'Approved' (the last row) isn't provider-submitted — it's granted
+      // once everything before it is done, so reaching it completes the
+      // flow immediately rather than sitting as its own interactive step.
+      if (next == _steps.length - 1 && !_steps[next].selfAttestable) {
+        next = _steps.length;
+      }
+      _verifyStep = next.clamp(0, _steps.length);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -137,10 +155,31 @@ class _VerifyScreenState extends State<VerifyScreen> {
                   ],
                 ),
               )
-            else
+            else if (_steps[_verifyStep].selfAttestable)
               PrimaryCtaButton(
-                label: 'Verify: ${_steps[_verifyStep].title}',
-                onPressed: () => setState(() => _verifyStep = (_verifyStep + 1).clamp(0, _steps.length)),
+                label: 'Submit: ${_steps[_verifyStep].title}',
+                onPressed: _advance,
+              )
+            else
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: tokens.card,
+                  border: Border.all(color: tokens.line),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Row(
+                  children: [
+                    Icon(LucideIcons.clock, size: 16, color: tokens.mut),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        '${_steps[_verifyStep].title} is checked by our team — we\'ll notify you once it\'s done.',
+                        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: tokens.mut),
+                      ),
+                    ),
+                  ],
+                ),
               ),
           ],
         ),
@@ -166,7 +205,11 @@ class _VerifyStepRow extends StatelessWidget {
     final Color titleColor = done || active ? tokens.tx : tokens.mut;
     final Color badgeColor = done ? AppColors.success : (active ? AppColors.primary : tokens.mut);
     final Color badgeBg = done ? const Color(0x1F2ECC71) : (active ? const Color(0x1F2E7DFF) : tokens.chip);
-    final String status = done ? 'Verified' : (active ? 'In review' : 'Pending');
+    final String status = done
+        ? (step.selfAttestable ? 'Submitted' : 'Verified')
+        : (active
+            ? (step.selfAttestable ? 'Action needed' : 'In review')
+            : 'Pending');
 
     final dot = Container(
       width: 32,

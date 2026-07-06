@@ -5,6 +5,7 @@ import 'package:at_your_service/app.dart';
 import 'package:at_your_service/core/services/auth_service.dart';
 import 'package:at_your_service/core/theme/app_theme.dart';
 import 'package:at_your_service/core/widgets/mobile_frame.dart';
+import 'package:at_your_service/features/disputes/file_dispute_screen.dart';
 import 'package:at_your_service/features/provider/provider_earnings_screen.dart';
 import 'package:at_your_service/features/provider/provider_in_progress_screen.dart';
 import 'package:at_your_service/features/provider/provider_job_details_screen.dart';
@@ -91,6 +92,51 @@ void main() {
 
     expect(find.text('Navigate'), findsOneWidget);
     expect(find.text('Start Navigation'), findsOneWidget);
+  });
+
+  testWidgets('Job Details shows Report an issue only for an already-accepted real job', (tester) async {
+    // Not shown on an Available-tab job (isAlreadyAccepted: false, the
+    // default) — reporting an issue only makes sense once it's actually
+    // this provider's job.
+    await tester.pumpWidget(
+      _harness(const ProviderJobDetailsScreen(
+        job: ProviderJob(id: 'job-1', customerId: 'customer-1', title: 'Deep House Cleaning', price: 600, timeLabel: 'Today · 10:00 AM', distanceLabel: '2.3 km'),
+      )),
+    );
+    expect(find.text('Report an issue'), findsNothing);
+
+    // Shown once accepted. Tapping it resolves the provider's own uid via
+    // FirebaseAuth, which is unavailable in tests (no live Firebase app) —
+    // same limitation as this screen's existing "Message Customer" button —
+    // so this only confirms the button renders and doesn't crash on tap,
+    // not the full navigation (covered separately by pumping
+    // FileDisputeScreen directly below).
+    await tester.pumpWidget(
+      _harness(const ProviderJobDetailsScreen(
+        job: ProviderJob(id: 'job-1', customerId: 'customer-1', title: 'Deep House Cleaning', price: 600, timeLabel: 'Today · 10:00 AM', distanceLabel: '2.3 km'),
+        isAlreadyAccepted: true,
+      )),
+    );
+    await tester.scrollUntilVisible(find.text('Report an issue'), 300, scrollable: find.byType(Scrollable));
+    expect(find.text('Report an issue'), findsOneWidget);
+    await tester.tap(find.text('Report an issue'));
+    await tester.pump();
+  });
+
+  testWidgets('FileDisputeScreen renders subject/priority/description fields', (tester) async {
+    await tester.pumpWidget(_harness(const FileDisputeScreen(
+      bookingId: 'booking-1',
+      customerId: 'customer-1',
+      providerId: 'provider-1',
+      serviceName: 'Deep House Cleaning',
+    )));
+
+    expect(find.text('Report a Problem'), findsOneWidget);
+    expect(find.text('Deep House Cleaning'), findsOneWidget);
+    expect(find.text('Low'), findsOneWidget);
+    expect(find.text('Medium'), findsOneWidget);
+    expect(find.text('High'), findsOneWidget);
+    expect(find.text('Submit Report'), findsOneWidget);
   });
 
   testWidgets('Navigate Start Navigation opens In Progress', (tester) async {

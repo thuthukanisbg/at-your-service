@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
@@ -5,6 +6,11 @@ import '../../core/services/auth_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/primary_cta_button.dart';
+import '../../models/user_role.dart';
+import '../admin/admin_login_screen.dart';
+import '../admin/admin_shell.dart';
+import '../customer/customer_shell.dart';
+import '../provider/provider_shell.dart';
 import '../role_select/role_select_screen.dart';
 
 class AuthScreen extends StatefulWidget {
@@ -39,6 +45,35 @@ class _AuthScreenState extends State<AuthScreen> {
     _showSnack('$what arrives in the next milestone.');
   }
 
+  void _openPhoneSignIn(BuildContext context) {
+    final tokens = context.tokens;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: tokens.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (sheetContext) => _PhoneSignInSheet(
+        onVerified: () async {
+          Navigator.of(sheetContext).pop();
+          final savedRole = await AuthService.instance.fetchSavedRole();
+          if (!context.mounted) return;
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => _screenFor(savedRole)),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _screenFor(UserRole? role) {
+    return switch (role) {
+      UserRole.customer => const CustomerShell(),
+      UserRole.provider => const ProviderShell(),
+      UserRole.admin => const AdminShell(),
+      null => const RoleSelectScreen(),
+    };
+  }
+
   Future<void> _submit() async {
     final name = _nameController.text.trim();
     final email = _emailController.text.trim();
@@ -55,8 +90,13 @@ class _AuthScreenState extends State<AuthScreen> {
         await AuthService.instance.signUp(name: name, email: email, password: password);
       }
       if (!mounted) return;
+      // A returning user who already picked a role in an earlier session
+      // skips RoleSelectScreen entirely; a brand-new one (role still null)
+      // falls through to it exactly as before.
+      final savedRole = await AuthService.instance.fetchSavedRole();
+      if (!mounted) return;
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const RoleSelectScreen()),
+        MaterialPageRoute(builder: (_) => _screenFor(savedRole)),
       );
     } on AuthException catch (e) {
       if (!mounted) return;
@@ -162,8 +202,22 @@ class _AuthScreenState extends State<AuthScreen> {
               children: [
                 Expanded(child: _SocialButton(icon: LucideIcons.mail, label: 'Google', onTap: () => _comingSoon('Google sign-in'))),
                 const SizedBox(width: 11),
-                Expanded(child: _SocialButton(icon: LucideIcons.smartphone, label: 'Phone', onTap: () => _comingSoon('Phone sign-in'))),
+                Expanded(child: _SocialButton(icon: LucideIcons.smartphone, label: 'Phone', onTap: () => _openPhoneSignIn(context))),
               ],
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top: 22),
+              child: Center(
+                child: TextButton(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const AdminLoginScreen()),
+                  ),
+                  child: Text(
+                    'Admin? Sign in here',
+                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: tokens.mut),
+                  ),
+                ),
+              ),
             ),
           ],
         ),
@@ -259,6 +313,148 @@ class _AuthTextField extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Two-step phone sign-in: enter a number, then the SMS code sent to it.
+/// On web (this app's only tested platform) FirebaseAuth shows its own
+/// invisible reCAPTCHA challenge automatically before sending the code.
+class _PhoneSignInSheet extends StatefulWidget {
+  const _PhoneSignInSheet({required this.onVerified});
+
+  final Future<void> Function() onVerified;
+
+  @override
+  State<_PhoneSignInSheet> createState() => _PhoneSignInSheetState();
+}
+
+class _PhoneSignInSheetState extends State<_PhoneSignInSheet> {
+  final _phoneController = TextEditingController();
+  final _codeController = TextEditingController();
+  ConfirmationResult? _confirmation;
+  bool _submitting = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _phoneController.dispose();
+    _codeController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _sendCode() async {
+    final phone = _phoneController.text.trim();
+    if (phone.isEmpty) {
+      setState(() => _error = 'Enter a phone number.');
+      return;
+    }
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    try {
+      final confirmation = await AuthService.instance.sendPhoneVerificationCode(phone);
+      if (!mounted) return;
+      setState(() {
+        _confirmation = confirmation;
+        _submitting = false;
+      });
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _submitting = false;
+        _error = e.message;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _submitting = false;
+        _error = 'Something went wrong. Please try again.';
+      });
+    }
+  }
+
+  Future<void> _verifyCode() async {
+    final code = _codeController.text.trim();
+    if (code.isEmpty) {
+      setState(() => _error = 'Enter the code you received.');
+      return;
+    }
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    try {
+      await AuthService.instance.confirmPhoneCode(confirmation: _confirmation!, smsCode: code);
+      await widget.onVerified();
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _submitting = false;
+        _error = e.message;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _submitting = false;
+        _error = 'Something went wrong. Please try again.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = context.tokens;
+    final codeStep = _confirmation != null;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(context).viewInsets.bottom + 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            codeStep ? 'Enter verification code' : 'Sign in with phone',
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: tokens.tx),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            codeStep ? 'Sent to ${_phoneController.text.trim()}.' : "We'll text you a one-time code.",
+            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500, color: tokens.mut),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            key: ValueKey(codeStep),
+            controller: codeStep ? _codeController : _phoneController,
+            keyboardType: codeStep ? TextInputType.number : TextInputType.phone,
+            autofocus: true,
+            decoration: InputDecoration(
+              hintText: codeStep ? '123456' : '+27 82 123 4567',
+              border: const OutlineInputBorder(),
+            ),
+          ),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: Text(_error!, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.danger)),
+            ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton(
+              onPressed: _submitting ? null : (codeStep ? _verifyCode : _sendCode),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
+                textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+              ),
+              child: Text(_submitting ? 'Please wait…' : (codeStep ? 'Verify' : 'Send Code')),
             ),
           ),
         ],

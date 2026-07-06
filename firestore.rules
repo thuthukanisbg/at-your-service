@@ -42,6 +42,12 @@ service cloud.firestore {
       allow read: if isSignedIn()
         && (resource.data.customerId == uid()
             || resource.data.get('providerId', null) == uid()
+            // Any provider may browse unclaimed, still-open jobs — confirmed
+            // against live data that every 'pending' booking has providerId
+            // null and every 'completed' one has it set, so this pairing is
+            // the real "available job" definition, not just today's data
+            // happening to correlate.
+            || (isProvider() && resource.data.get('providerId', null) == null && resource.data.status == 'pending')
             || isAdmin());
       allow create: if isSignedIn() && request.resource.data.customerId == uid();
       // A customer may only cancel their own booking.
@@ -67,6 +73,138 @@ service cloud.firestore {
         && request.resource.data.customerId == uid()
         && get(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.customerId == uid();
       allow update, delete: if isAdmin();
+    }
+
+    match /disputes/{disputeId} {
+      // Filed by whichever party (customer or provider) owns the booking
+      // being disputed — checked against the real booking doc, same
+      // pattern as `reviews`' own create rule. Status starts 'Open' and is
+      // admin-only to change afterward (see `allow update` below); the
+      // filer can't self-escalate/resolve their own report.
+      function booking() {
+        return get(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data;
+      }
+      allow read: if isSignedIn()
+        && (resource.data.customerId == uid() || resource.data.get('providerId', null) == uid() || isAdmin());
+      allow create: if isSignedIn()
+        && request.resource.data.filedBy == uid()
+        && request.resource.data.status == 'Open'
+        && request.resource.data.priority in ['Low', 'Medium', 'High']
+        && (request.resource.data.customerId == uid() || request.resource.data.get('providerId', null) == uid())
+        && (booking().customerId == uid() || booking().get('providerId', null) == uid());
+      // Identity/content fields stay fixed; only status (and updatedAt)
+      // moves — admin triage, not a re-edit of the original report.
+      allow update: if isAdmin()
+        && request.resource.data.customerId == resource.data.customerId
+        && request.resource.data.providerId == resource.data.providerId
+        && request.resource.data.bookingId == resource.data.bookingId
+        && request.resource.data.filedBy == resource.data.filedBy
+        && request.resource.data.subject == resource.data.subject
+        && request.resource.data.description == resource.data.description;
+    }
+
+    match /providerApplications/{applicationId} {
+      // Keyed on the doc's own `userId` field (confirmed against live data
+      // — auto-generated doc IDs here, not the uid, unlike providers/
+      // providerPrivate below). Note: several pre-existing applications
+      // predate this field and have no uid on them at all, so those are
+      // admin-only readable — there's no way to match them to an applicant.
+      allow read: if isAdmin()
+        || (isSignedIn() && resource.data.get('userId', null) == uid());
+      allow create: if isSignedIn() && request.resource.data.userId == uid();
+      // Review/decision fields (status, adminNote, trustLevel, etc.) are
+      // admin-only; applicants don't self-edit their own submission here.
+      allow update: if isAdmin();
+    }
+
+    match /providerPrivate/{ownerId} {
+      // Doc ID is the owner's own uid (confirmed against live data).
+      allow read: if isSignedIn() && (uid() == ownerId || isAdmin());
+      allow write: if isSignedIn() && (uid() == ownerId || isAdmin());
+    }
+
+    match /providers/{providerId} {
+      // Public approved-provider directory — browsable like services/
+      // serviceCategories. Write is admin-only: live data shows providers
+      // and providerPrivate updatedAt moving together, consistent with a
+      // single admin/backend operation populating both, not the provider
+      // self-editing their own public profile.
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /adminAuditLog/{logId} {
+      allow read: if isAdmin();
+      // No direct client writes, even from admin — this should be written
+      // by a trusted backend path (Cloud Function) once one exists, not
+      // set directly from a client.
+      allow write: if false;
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if isSignedIn() && (resource.data.get('userId', null) == uid() || isAdmin());
+      // The owning user may only flip `read`; everything else about a
+      // notification is admin/backend-owned.
+      allow update: if isSignedIn() && resource.data.get('userId', null) == uid()
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.title == resource.data.title
+        && request.resource.data.body == resource.data.body;
+      // No automated trigger writes these yet (no Cloud Functions in this
+      // project) — admin-only create for now, same as adminAuditLog's note.
+      allow create: if isAdmin();
+      allow delete: if false;
+    }
+
+    // One conversation per booking — doc ID is the booking's own ID.
+    // Lazy-created on first message (no Cloud Function seeds these), so
+    // `.set(merge: true)` from either participant is a `create` the first
+    // time and an `update` every time after; both paths are covered below.
+    match /conversations/{conversationId} {
+      // Same doc ID as the booking (see the comment above) — used so a
+      // still-open job can have its conversation's providerId re-assigned
+      // below without letting anyone hijack an already-claimed one.
+      function booking() {
+        return get(/databases/$(database)/documents/bookings/$(conversationId)).data;
+      }
+
+      allow read: if isSignedIn() && (resource.data.customerId == uid() || resource.data.providerId == uid() || isAdmin());
+      allow create: if isSignedIn() && (request.resource.data.customerId == uid() || request.resource.data.providerId == uid());
+      // Only a participant may update, and only their own identity fields
+      // (bookingId/customerId) stay fixed — lastMessage* is meant to
+      // change on every send. providerId is the one exception: a job can
+      // be messaged by more than one interested provider before it's
+      // accepted (see "Message Customer" on an unclaimed job), so while
+      // the underlying booking is still unclaimed, a different signed-in
+      // provider may take over as the conversation's providerId; once the
+      // booking has a real provider assigned, only that provider (or the
+      // customer) may continue touching it.
+      allow update: if isSignedIn()
+        && (resource.data.customerId == uid() || resource.data.providerId == uid()
+          || (booking().providerId == null && request.resource.data.providerId == uid()))
+        && request.resource.data.bookingId == resource.data.bookingId
+        && request.resource.data.customerId == resource.data.customerId
+        && (request.resource.data.providerId == resource.data.providerId || booking().providerId == null);
+
+      match /messages/{messageId} {
+        function conversationExists() {
+          return exists(/databases/$(database)/documents/conversations/$(conversationId));
+        }
+        function conversation() {
+          return get(/databases/$(database)/documents/conversations/$(conversationId)).data;
+        }
+        // The parent conversation doc doesn't exist until the first message
+        // is sent (see the lazy-create comment above) — reading this
+        // subcollection before that must still succeed (with zero results)
+        // rather than deny, since `get()`ing a document that doesn't exist
+        // fails the whole condition. Nothing sensitive is exposed either
+        // way: there are no messages to leak when the conversation itself
+        // has never been created.
+        allow read: if isSignedIn() && (!conversationExists() || conversation().customerId == uid() || conversation().providerId == uid() || isAdmin());
+        allow create: if isSignedIn() && request.resource.data.senderId == uid()
+          && conversationExists() && (conversation().customerId == uid() || conversation().providerId == uid());
+        // Messages are immutable once sent.
+        allow update, delete: if false;
+      }
     }
   }
 }

@@ -6,20 +6,28 @@ import '../../core/theme/app_tokens.dart';
 import '../../core/utils/currency.dart';
 import '../../models/provider_job.dart';
 import 'provider_job_details_screen.dart';
+import 'provider_jobs_service.dart';
 import 'provider_mock_data.dart';
 
-class ProviderJobsScreen extends StatelessWidget {
+class ProviderJobsScreen extends StatefulWidget {
   const ProviderJobsScreen({super.key});
 
-  void _comingSoon(BuildContext context, String what) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$what arrives in the next milestone.')),
-    );
-  }
+  @override
+  State<ProviderJobsScreen> createState() => _ProviderJobsScreenState();
+}
+
+enum _JobTab { available, accepted }
+
+class _ProviderJobsScreenState extends State<ProviderJobsScreen> {
+  late final Future<List<ProviderJob>> _availableFuture = fetchAvailableJobs();
+  late final Future<List<ProviderJob>> _acceptedFuture = fetchAssignedJobs();
+  _JobTab _tab = _JobTab.available;
 
   void _openJob(BuildContext context, ProviderJob job) {
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => ProviderJobDetailsScreen(job: job)),
+      MaterialPageRoute(
+        builder: (_) => ProviderJobDetailsScreen(job: job, isAlreadyAccepted: _tab == _JobTab.accepted),
+      ),
     );
   }
 
@@ -73,29 +81,93 @@ class ProviderJobsScreen extends StatelessWidget {
               child: Row(
                 children: [
                   Expanded(
-                    child: Container(
-                      height: 36,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(9)),
-                      child: const Text('Available', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Colors.white)),
+                    child: InkWell(
+                      onTap: () => setState(() => _tab = _JobTab.available),
+                      borderRadius: BorderRadius.circular(9),
+                      child: Container(
+                        height: 36,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: _tab == _JobTab.available ? AppColors.primary : null,
+                          borderRadius: BorderRadius.circular(9),
+                        ),
+                        child: Text(
+                          'Available',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: _tab == _JobTab.available ? FontWeight.w800 : FontWeight.w700,
+                            color: _tab == _JobTab.available ? Colors.white : tokens.mut,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: InkWell(
-                      onTap: () => _comingSoon(context, 'Accepted jobs'),
+                      onTap: () => setState(() => _tab = _JobTab.accepted),
                       borderRadius: BorderRadius.circular(9),
                       child: Container(
                         height: 36,
                         alignment: Alignment.center,
-                        child: Text('Accepted', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: tokens.mut)),
+                        decoration: BoxDecoration(
+                          color: _tab == _JobTab.accepted ? AppColors.primary : null,
+                          borderRadius: BorderRadius.circular(9),
+                        ),
+                        child: Text(
+                          'Accepted',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: _tab == _JobTab.accepted ? FontWeight.w800 : FontWeight.w700,
+                            color: _tab == _JobTab.accepted ? Colors.white : tokens.mut,
+                          ),
+                        ),
                       ),
                     ),
                   ),
                 ],
               ),
             ),
-            for (final job in providerJobs) _JobCard(job: job, onTap: () => _openJob(context, job)),
+            FutureBuilder<List<ProviderJob>>(
+              future: _tab == _JobTab.available ? _availableFuture : _acceptedFuture,
+              builder: (context, snapshot) {
+                if (!snapshot.hasData && !snapshot.hasError) {
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 32),
+                    child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
+                  );
+                }
+                // Error (e.g. no live Firebase app) falls back to mock jobs;
+                // a real empty result (a provider genuinely has none right
+                // now) gets its own honest empty state instead.
+                if (snapshot.hasError) {
+                  return Column(
+                    children: [
+                      for (final job in providerJobs)
+                        _JobCard(job: job, isAccepted: _tab == _JobTab.accepted, onTap: () => _openJob(context, job)),
+                    ],
+                  );
+                }
+                final jobs = snapshot.data!;
+                if (jobs.isEmpty) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 32),
+                    child: Center(
+                      child: Text(
+                        _tab == _JobTab.available ? 'No open jobs right now.' : 'No jobs assigned yet.',
+                        style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: tokens.mut),
+                      ),
+                    ),
+                  );
+                }
+                return Column(
+                  children: [
+                    for (final job in jobs)
+                      _JobCard(job: job, isAccepted: _tab == _JobTab.accepted, onTap: () => _openJob(context, job)),
+                  ],
+                );
+              },
+            ),
           ],
         ),
       ),
@@ -104,10 +176,11 @@ class ProviderJobsScreen extends StatelessWidget {
 }
 
 class _JobCard extends StatelessWidget {
-  const _JobCard({required this.job, required this.onTap});
+  const _JobCard({required this.job, required this.onTap, this.isAccepted = false});
 
   final ProviderJob job;
   final VoidCallback onTap;
+  final bool isAccepted;
 
   @override
   Widget build(BuildContext context) {
@@ -171,7 +244,7 @@ class _JobCard extends StatelessWidget {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
                   textStyle: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800),
                 ),
-                child: const Text('Accept Job'),
+                child: Text(isAccepted ? 'View Job' : 'Accept Job'),
               ),
             ),
           ],

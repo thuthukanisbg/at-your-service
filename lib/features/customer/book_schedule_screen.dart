@@ -24,9 +24,21 @@ const _dates = [
 const _times = ['08:00 AM', '10:00 AM', '02:00 PM', '04:00 PM'];
 
 class BookScheduleScreen extends StatefulWidget {
-  const BookScheduleScreen({super.key});
+  const BookScheduleScreen({
+    super.key,
+    required this.serviceName,
+    required this.price,
+    this.serviceId,
+  });
 
   static const routeName = '/customer/book';
+
+  final String serviceName;
+  final num price;
+
+  /// Null when ServiceDetailsScreen's fetch errored/found nothing and fell
+  /// back to mock display data — there's no real services doc to reference.
+  final String? serviceId;
 
   @override
   State<BookScheduleScreen> createState() => _BookScheduleScreenState();
@@ -35,6 +47,13 @@ class BookScheduleScreen extends StatefulWidget {
 class _BookScheduleScreenState extends State<BookScheduleScreen> {
   int _dateIndex = 1; // '21 May' — matches the handoff's initial state.
   int _timeIndex = 1; // '10:00 AM'
+  final _notesController = TextEditingController();
+
+  @override
+  void dispose() {
+    _notesController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -105,6 +124,7 @@ class _BookScheduleScreenState extends State<BookScheduleScreen> {
                 borderRadius: BorderRadius.circular(14),
               ),
               child: TextField(
+                controller: _notesController,
                 maxLines: null,
                 minLines: 2,
                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: tokens.tx),
@@ -123,6 +143,10 @@ class _BookScheduleScreenState extends State<BookScheduleScreen> {
                   builder: (_) => ReviewPayScreen(
                     selectedDate: _dates[_dateIndex].value,
                     selectedTime: _times[_timeIndex],
+                    serviceId: widget.serviceId,
+                    serviceName: widget.serviceName,
+                    price: widget.price,
+                    notes: _notesController.text.trim(),
                   ),
                 ),
               ),

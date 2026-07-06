@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
@@ -8,9 +10,11 @@ import '../admin/admin_shell.dart';
 import '../customer/customer_shell.dart';
 import '../provider/provider_shell.dart';
 
-/// Entry screen for the local-first rebuild ("chooser" in the design
-/// handoff). Stands in for real authentication until Firebase Auth is
-/// reconnected: picking a role drops straight into that role's home.
+/// Entry screen ("chooser" in the design handoff), reached after real
+/// sign-in/sign-up. Picking a role drops straight into that role's home and
+/// persists the choice back to `users/{uid}.role` (rules allow setting it
+/// once while null; the write is best-effort/fire-and-forget so navigation
+/// never waits on it or breaks without a live Firebase app, e.g. in tests).
 class RoleSelectScreen extends StatelessWidget {
   const RoleSelectScreen({super.key});
 
@@ -22,7 +26,21 @@ class RoleSelectScreen extends StatelessWidget {
       UserRole.provider => ProviderShell.routeName,
       UserRole.admin => AdminShell.routeName,
     };
+    _persistRole(role);
     Navigator.of(context).pushNamed(routeName);
+  }
+
+  void _persistRole(UserRole role) {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+      FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .update({'role': role.name}).catchError((_) {});
+    } catch (_) {
+      // Best-effort — e.g. no live Firebase app (widget tests).
+    }
   }
 
   @override

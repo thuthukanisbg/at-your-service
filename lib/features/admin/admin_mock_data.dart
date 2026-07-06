@@ -2,10 +2,14 @@ import '../../core/theme/app_colors.dart';
 import '../../models/admin_applicant.dart';
 
 class AdminStat {
-  const AdminStat({required this.value, required this.label, required this.delta});
+  const AdminStat({required this.value, required this.label, this.delta});
   final String value;
   final String label;
-  final String delta;
+
+  /// Null when there's no real basis for a trend figure (no stored
+  /// prior-period value to diff against) — the delta chip just isn't
+  /// rendered in that case, rather than fabricating a percentage.
+  final String? delta;
 }
 
 const adminStats = [

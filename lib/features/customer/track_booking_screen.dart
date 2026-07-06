@@ -1,9 +1,14 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_tokens.dart';
+import '../../core/widgets/detail_screen_header.dart';
 import '../../core/widgets/diagonal_stripes_painter.dart';
+import '../disputes/file_dispute_screen.dart';
+import '../messaging/conversation_screen.dart';
 import 'rate_review_screen.dart';
 
 enum _StepState { done, active, idle }
@@ -29,9 +34,38 @@ const _trackSteps = [
 ];
 
 class TrackBookingScreen extends StatelessWidget {
-  const TrackBookingScreen({super.key});
+  const TrackBookingScreen({
+    super.key,
+    this.bookingId,
+    this.customerId,
+    this.providerId,
+    this.serviceName,
+    this.otherPartyName,
+  });
 
   static const routeName = '/customer/track';
+
+  /// Only set when reached from a real booking (see `CustomerBookingsScreen`
+  /// — tapping a booking with an assigned provider). The mock flow reached
+  /// via ReviewPayScreen's "Confirm & Pay" never creates a real Firestore
+  /// booking, so these stay null there and this screen behaves exactly as
+  /// before: fully decorative demo, Chat still shows the coming-soon
+  /// snackbar since there's no real booking to attach a conversation to.
+  final String? bookingId;
+  final String? customerId;
+  final String? providerId;
+  final String? serviceName;
+  final String? otherPartyName;
+
+  bool get _hasRealBooking => bookingId != null && customerId != null && providerId != null;
+
+  /// True for any real booking (assigned or not) — as opposed to the pure
+  /// demo entry point via ReviewPayScreen's mock "Confirm & Pay", where
+  /// bookingId is null. Used to swap the fake live-map/4-step timeline for
+  /// an honest 2-step one: there's no real live-location data behind this
+  /// screen, so pretending a provider is "on the way" for a booking that
+  /// might not even be assigned yet would be actively misleading.
+  bool get _isRealBooking => bookingId != null;
 
   void _comingSoon(BuildContext context, String what) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -39,106 +73,166 @@ class TrackBookingScreen extends StatelessWidget {
     );
   }
 
+  Future<void> _callProvider(BuildContext context) async {
+    if (!_hasRealBooking) {
+      _comingSoon(context, 'Calling');
+      return;
+    }
+    // No providers in the live data have a phone number on file yet (it's
+    // never collected during onboarding) — fetched lazily on tap rather
+    // than eagerly for every screen load, since it's only needed here.
+    final doc = await FirebaseFirestore.instance.collection('users').doc(providerId).get();
+    final phone = doc.data()?['phoneNumber'] as String?;
+    if (!context.mounted) return;
+    if (phone == null || phone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No phone number on file for this provider yet.')),
+      );
+      return;
+    }
+    final launched = await launchUrl(Uri(scheme: 'tel', path: phone));
+    if (!launched && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Couldn't open the dialer.")),
+      );
+    }
+  }
+
+  void _reportProblem(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => FileDisputeScreen(
+          bookingId: bookingId!,
+          customerId: customerId!,
+          providerId: providerId,
+          serviceName: serviceName ?? 'Service',
+        ),
+      ),
+    );
+  }
+
+  void _openChat(BuildContext context) {
+    if (!_hasRealBooking) {
+      _comingSoon(context, 'Chat');
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ConversationScreen(
+          bookingId: bookingId!,
+          customerId: customerId!,
+          providerId: providerId!,
+          serviceName: serviceName ?? 'Service',
+          otherPartyName: otherPartyName ?? 'Your provider',
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final tokens = context.tokens;
+    final displayName = otherPartyName ?? 'Sipho M.';
+    final initials = displayName.trim().isEmpty
+        ? '?'
+        : displayName.trim().split(RegExp(r'\s+')).map((p) => p[0]).take(2).join().toUpperCase();
     return Scaffold(
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 6, 20, 24),
           children: [
-            Text(
-              'My Booking',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: -0.4, color: tokens.tx),
-            ),
+            const DetailScreenHeader(title: 'My Booking'),
             const SizedBox(height: 16),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: SizedBox(
-                height: 150,
-                child: Stack(
-                  children: [
-                    Positioned.fill(
-                      child: CustomPaint(painter: DiagonalStripesPainter(chip: tokens.chip, elev: tokens.elev)),
-                    ),
-                    Center(
-                      child: Text(
-                        '[ live map ]',
-                        style: TextStyle(fontFamily: 'monospace', fontSize: 11, color: tokens.mut),
+            if (!_isRealBooking) ...[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: SizedBox(
+                  height: 150,
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: CustomPaint(painter: DiagonalStripesPainter(chip: tokens.chip, elev: tokens.elev)),
                       ),
-                    ),
-                    Positioned(
-                      top: 14,
-                      left: 14,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
-                        decoration: BoxDecoration(
-                          color: tokens.surface,
-                          border: Border.all(color: tokens.line),
-                          borderRadius: BorderRadius.circular(10),
+                      Center(
+                        child: Text(
+                          '[ live map ]',
+                          style: TextStyle(fontFamily: 'monospace', fontSize: 11, color: tokens.mut),
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            _PulsingOpacity(
-                              duration: const Duration(milliseconds: 1400),
-                              child: Container(
-                                width: 8,
-                                height: 8,
-                                decoration: const BoxDecoration(color: AppColors.success, shape: BoxShape.circle),
+                      ),
+                      Positioned(
+                        top: 14,
+                        left: 14,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+                          decoration: BoxDecoration(
+                            color: tokens.surface,
+                            border: Border.all(color: tokens.line),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _PulsingOpacity(
+                                duration: const Duration(milliseconds: 1400),
+                                child: Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: const BoxDecoration(color: AppColors.success, shape: BoxShape.circle),
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 7),
-                            Text(
-                              'Pro on the way · 12 min',
-                              style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: tokens.tx),
-                            ),
-                          ],
+                              const SizedBox(width: 7),
+                              Text(
+                                'Pro on the way · 12 min',
+                                style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: tokens.tx),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+            ],
+            if (!_isRealBooking || providerId != null)
+              Container(
+                padding: const EdgeInsets.all(15),
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: tokens.card,
+                  border: Border.all(color: tokens.line),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
+                      alignment: Alignment.center,
+                      child: Text(initials, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white)),
                     ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(displayName, style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800, color: tokens.tx)),
+                          Text(
+                            'Cleaning Specialist · ⭐ 4.9',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: tokens.mut),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    _CircleIconButton(icon: LucideIcons.phone, onTap: () { _callProvider(context); }),
+                    const SizedBox(width: 12),
+                    _CircleIconButton(icon: LucideIcons.messageCircle, onTap: () => _openChat(context)),
                   ],
                 ),
               ),
-            ),
-            const SizedBox(height: 14),
-            Container(
-              padding: const EdgeInsets.all(15),
-              margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(
-                color: tokens.card,
-                border: Border.all(color: tokens.line),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
-                    alignment: Alignment.center,
-                    child: const Text('SM', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white)),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Sipho M.', style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800, color: tokens.tx)),
-                        Text(
-                          'Cleaning Specialist · ⭐ 4.9',
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: tokens.mut),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  _CircleIconButton(icon: LucideIcons.phone, onTap: () => _comingSoon(context, 'Calling')),
-                  const SizedBox(width: 12),
-                  _CircleIconButton(icon: LucideIcons.messageCircle, onTap: () => _comingSoon(context, 'Chat')),
-                ],
-              ),
-            ),
             Text('Booking status', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: tokens.tx)),
             const SizedBox(height: 12),
             Container(
@@ -150,10 +244,30 @@ class TrackBookingScreen extends StatelessWidget {
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Column(
-                children: [
-                  for (var i = 0; i < _trackSteps.length; i++)
-                    _TrackStepRow(step: _trackSteps[i], isLast: i == _trackSteps.length - 1),
-                ],
+                children: _isRealBooking
+                    ? [
+                        // Real bookings only ever have two known statuses
+                        // ('pending'/'completed') and no live-location data —
+                        // showing the demo's granular "on the way" steps here
+                        // would be fabricated, so this is an honest 2-step
+                        // version instead.
+                        _TrackStepRow(
+                          step: const _TrackStep('Booking confirmed', '', _StepState.done),
+                          isLast: false,
+                        ),
+                        _TrackStepRow(
+                          step: _TrackStep(
+                            providerId != null ? 'Provider assigned · $displayName' : 'Waiting for a provider',
+                            '',
+                            providerId != null ? _StepState.done : _StepState.idle,
+                          ),
+                          isLast: true,
+                        ),
+                      ]
+                    : [
+                        for (var i = 0; i < _trackSteps.length; i++)
+                          _TrackStepRow(step: _trackSteps[i], isLast: i == _trackSteps.length - 1),
+                      ],
               ),
             ),
             InkWell(
@@ -176,6 +290,16 @@ class TrackBookingScreen extends StatelessWidget {
                 ),
               ),
             ),
+            if (_hasRealBooking)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: TextButton.icon(
+                  onPressed: () => _reportProblem(context),
+                  style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+                  icon: const Icon(LucideIcons.flag, size: 16),
+                  label: const Text('Report a problem', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                ),
+              ),
           ],
         ),
       ),
