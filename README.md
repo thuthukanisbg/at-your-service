@@ -43,6 +43,9 @@ flutter pub get
 flutter run
 ```
 
+Native support starts at Android 6.0 (API 23) and iOS 15.0, matching the
+minimum versions required by the checked-in FlutterFire dependencies.
+
 Quality checks:
 
 ```sh
