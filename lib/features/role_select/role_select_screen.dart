@@ -37,7 +37,8 @@ class RoleSelectScreen extends StatelessWidget {
       FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
-          .update({'role': role.name}).catchError((_) {});
+          .update({'role': role.name})
+          .catchError((_) {});
     } catch (_) {
       // Best-effort — e.g. no live Firebase app (widget tests).
     }
@@ -71,7 +72,11 @@ class RoleSelectScreen extends StatelessWidget {
                           ),
                         ],
                       ),
-                      child: const Icon(LucideIcons.home, size: 34, color: AppColors.accentOnAccent),
+                      child: const Icon(
+                        LucideIcons.home,
+                        size: 34,
+                        color: AppColors.accentOnAccent,
+                      ),
                     ),
                     const SizedBox(height: 14),
                     Text(
@@ -88,11 +93,24 @@ class RoleSelectScreen extends StatelessWidget {
                     Text(
                       'Choose your experience to get started.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: tokens.mut),
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: tokens.mut,
+                      ),
                     ),
                     const SizedBox(height: 24),
-                    for (final role in UserRole.values) ...[
-                      _RoleCard(role: role, onTap: () => _selectRole(context, role)),
+                    // Admin accounts are provisioned by an existing admin
+                    // and use the dedicated admin sign-in route. They must
+                    // never be self-selected during public registration.
+                    for (final role in const [
+                      UserRole.customer,
+                      UserRole.provider,
+                    ]) ...[
+                      _RoleCard(
+                        role: role,
+                        onTap: () => _selectRole(context, role),
+                      ),
                       const SizedBox(height: 12),
                     ],
                     const SizedBox(height: 12),
@@ -100,10 +118,30 @@ class RoleSelectScreen extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(horizontal: 4),
                       child: Row(
                         children: const [
-                          Expanded(child: _TrustBadge(icon: LucideIcons.creditCard, label: 'Secure Payments')),
-                          Expanded(child: _TrustBadge(icon: LucideIcons.shieldCheck, label: 'Verified Pros')),
-                          Expanded(child: _TrustBadge(icon: LucideIcons.headphones, label: '24/7 Support')),
-                          Expanded(child: _TrustBadge(icon: LucideIcons.checkCircle2, label: 'Satisfaction')),
+                          Expanded(
+                            child: _TrustBadge(
+                              icon: LucideIcons.creditCard,
+                              label: 'Secure Payments',
+                            ),
+                          ),
+                          Expanded(
+                            child: _TrustBadge(
+                              icon: LucideIcons.shieldCheck,
+                              label: 'Verified Pros',
+                            ),
+                          ),
+                          Expanded(
+                            child: _TrustBadge(
+                              icon: LucideIcons.headphones,
+                              label: '24/7 Support',
+                            ),
+                          ),
+                          Expanded(
+                            child: _TrustBadge(
+                              icon: LucideIcons.checkCircle2,
+                              label: 'Satisfaction',
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -129,15 +167,23 @@ class _RoleCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = context.tokens;
-    final tagColor = _primary ? Colors.white.withValues(alpha: 0.85) : AppColors.primary;
+    final tagColor =
+        _primary ? Colors.white.withValues(alpha: 0.85) : AppColors.primary;
     final titleColor = _primary ? Colors.white : tokens.tx;
-    final descColor = _primary ? Colors.white.withValues(alpha: 0.8) : tokens.mut;
-    final iconBg = _primary
-        ? Colors.white.withValues(alpha: 0.16)
-        : (role == UserRole.provider
-            ? AppColors.accent.withValues(alpha: 0.16)
-            : AppColors.primary.withValues(alpha: 0.14));
-    final iconColor = _primary ? Colors.white : (role == UserRole.provider ? AppColors.accent : AppColors.primary);
+    final descColor =
+        _primary ? Colors.white.withValues(alpha: 0.8) : tokens.mut;
+    final iconBg =
+        _primary
+            ? Colors.white.withValues(alpha: 0.16)
+            : (role == UserRole.provider
+                ? AppColors.accent.withValues(alpha: 0.16)
+                : AppColors.primary.withValues(alpha: 0.14));
+    final iconColor =
+        _primary
+            ? Colors.white
+            : (role == UserRole.provider
+                ? AppColors.accent
+                : AppColors.primary);
 
     return Material(
       color: _primary ? null : tokens.card,
@@ -150,30 +196,35 @@ class _RoleCard extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(18),
             border: _primary ? null : Border.all(color: tokens.line),
-            gradient: _primary
-                ? const LinearGradient(
-                    begin: AppColors.heroGradientBegin,
-                    end: AppColors.heroGradientEnd,
-                    colors: AppColors.heroGradient,
-                  )
-                : null,
-            boxShadow: _primary
-                ? [
-                    BoxShadow(
-                      color: AppColors.primary.withValues(alpha: 0.7),
-                      blurRadius: 30,
-                      offset: const Offset(0, 14),
-                      spreadRadius: -14,
-                    ),
-                  ]
-                : null,
+            gradient:
+                _primary
+                    ? const LinearGradient(
+                      begin: AppColors.heroGradientBegin,
+                      end: AppColors.heroGradientEnd,
+                      colors: AppColors.heroGradient,
+                    )
+                    : null,
+            boxShadow:
+                _primary
+                    ? [
+                      BoxShadow(
+                        color: AppColors.primary.withValues(alpha: 0.7),
+                        blurRadius: 30,
+                        offset: const Offset(0, 14),
+                        spreadRadius: -14,
+                      ),
+                    ]
+                    : null,
           ),
           child: Row(
             children: [
               Container(
                 width: 50,
                 height: 50,
-                decoration: BoxDecoration(color: iconBg, borderRadius: BorderRadius.circular(14)),
+                decoration: BoxDecoration(
+                  color: iconBg,
+                  borderRadius: BorderRadius.circular(14),
+                ),
                 child: Icon(role.icon, size: 23, color: iconColor),
               ),
               const SizedBox(width: 14),
@@ -183,20 +234,34 @@ class _RoleCard extends StatelessWidget {
                   children: [
                     Text(
                       role.intro,
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, letterSpacing: -0.2, color: titleColor),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.2,
+                        color: titleColor,
+                      ),
                     ),
                     Padding(
                       padding: const EdgeInsets.only(top: 1),
                       child: Text(
                         role.label,
-                        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: tagColor),
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: tagColor,
+                        ),
                       ),
                     ),
                     Padding(
                       padding: const EdgeInsets.only(top: 5),
                       child: Text(
                         role.tagline,
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: descColor, height: 1.4),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: descColor,
+                          height: 1.4,
+                        ),
                       ),
                     ),
                   ],
@@ -236,7 +301,12 @@ class _TrustBadge extends StatelessWidget {
         Text(
           label,
           textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: tokens.mut, height: 1.25),
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            color: tokens.mut,
+            height: 1.25,
+          ),
         ),
       ],
     );
