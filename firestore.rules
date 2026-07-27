@@ -8,18 +8,25 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(uid())).data.role;
     }
     function isAdmin() { return isSignedIn() && myRole() == 'admin'; }
-    function isProvider() { return isSignedIn() && myRole() == 'provider'; }
+    function isProvider() {
+      return isSignedIn()
+        && myRole() == 'provider'
+        && exists(/databases/$(database)/documents/providers/$(uid()))
+        && get(/databases/$(database)/documents/providers/$(uid())).data.status == 'active';
+    }
 
     match /users/{userId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && uid() == userId;
       // Own-profile edits: role may be set once (sign-up stores it as null,
-      // the role chooser fills it in) but never changed afterwards; the
+      // the role chooser fills it in) to customer/provider only, but never
+      // self-promoted to admin or changed afterwards; the
       // backend-owned parts of providerProfile (stats, verification) change
       // only via admin action or Cloud Functions.
       allow update: if isSignedIn() && uid() == userId
         && (request.resource.data.role == resource.data.role
-            || resource.data.role == null)
+            || (resource.data.role == null
+                && request.resource.data.role in ['customer', 'provider']))
         && request.resource.data.get(['providerProfile', 'stats'], null)
              == resource.data.get(['providerProfile', 'stats'], null)
         && request.resource.data.get(['providerProfile', 'verification'], null)
@@ -42,7 +49,8 @@ service cloud.firestore {
       allow read: if isSignedIn()
         && (resource.data.customerId == uid()
             || resource.data.get('providerId', null) == uid()
-            // Any provider may browse unclaimed, still-open jobs — confirmed
+            // Any active, approved provider may browse unclaimed, still-open
+            // jobs — confirmed
             // against live data that every 'pending' booking has providerId
             // null and every 'completed' one has it set, so this pairing is
             // the real "available job" definition, not just today's data
