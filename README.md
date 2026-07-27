@@ -35,6 +35,9 @@ brand typography does not depend on a live Google Fonts request.
   earnings, profile, verification, messages, and disputes.
 - Mobile admin overview, bookings, providers, review workflow, and sign-out.
 - Responsive desktop admin shell at 900 px and wider.
+- Desktop admin account provisioning for customers/providers, including
+  password-setup emails, plus service-category creation and full-width
+  responsive directory tables.
 
 ## Running locally
 

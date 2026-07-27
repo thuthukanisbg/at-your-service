@@ -17,7 +17,13 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && uid() == userId;
+      // Public sign-up creates only its own role-null profile. An existing
+      // admin may also provision a customer/provider profile for an account
+      // created through the admin console's isolated Auth session.
+      allow create: if isSignedIn()
+        && (uid() == userId
+            || (isAdmin()
+                && request.resource.data.role in ['customer', 'provider']));
       // Own-profile edits: role may be set once (sign-up stores it as null,
       // the role chooser fills it in) to customer/provider only, but never
       // self-promoted to admin or changed afterwards; the
