@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../models/user_role.dart';
 
@@ -7,6 +10,61 @@ import '../../models/user_role.dart';
 class AuthException implements Exception {
   const AuthException(this.message);
   final String message;
+}
+
+/// Cross-platform handle for the second step of phone authentication.
+///
+/// Firebase uses [ConfirmationResult] on web and a verification ID plus
+/// [PhoneAuthCredential] on Android/iOS. Keeping that distinction here lets
+/// the authentication UI stay shared across all three platforms.
+abstract class PhoneVerificationSession {
+  bool get isAlreadyVerified;
+
+  Future<UserCredential> confirm(String smsCode);
+}
+
+class _WebPhoneVerificationSession implements PhoneVerificationSession {
+  const _WebPhoneVerificationSession(this.confirmation);
+
+  final ConfirmationResult confirmation;
+
+  @override
+  bool get isAlreadyVerified => false;
+
+  @override
+  Future<UserCredential> confirm(String smsCode) =>
+      confirmation.confirm(smsCode);
+}
+
+class _NativePhoneVerificationSession implements PhoneVerificationSession {
+  const _NativePhoneVerificationSession(this.auth, this.verificationId);
+
+  final FirebaseAuth auth;
+  final String verificationId;
+
+  @override
+  bool get isAlreadyVerified => false;
+
+  @override
+  Future<UserCredential> confirm(String smsCode) {
+    final credential = PhoneAuthProvider.credential(
+      verificationId: verificationId,
+      smsCode: smsCode,
+    );
+    return auth.signInWithCredential(credential);
+  }
+}
+
+class _CompletedPhoneVerificationSession implements PhoneVerificationSession {
+  const _CompletedPhoneVerificationSession(this.credential);
+
+  final UserCredential credential;
+
+  @override
+  bool get isAlreadyVerified => true;
+
+  @override
+  Future<UserCredential> confirm(String smsCode) async => credential;
 }
 
 /// Wraps FirebaseAuth/Firestore behind an overridable instance so widget
@@ -17,16 +75,26 @@ class AuthService {
 
   Future<void> signIn({required String email, required String password}) async {
     try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(email: email, password: password);
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
     } on FirebaseAuthException catch (e) {
       throw AuthException(_friendlyMessage(e));
     }
   }
 
-  Future<void> signUp({required String name, required String email, required String password}) async {
+  Future<void> signUp({
+    required String name,
+    required String email,
+    required String password,
+  }) async {
     final UserCredential credential;
     try {
-      credential = await FirebaseAuth.instance.createUserWithEmailAndPassword(email: email, password: password);
+      credential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
     } on FirebaseAuthException catch (e) {
       throw AuthException(_friendlyMessage(e));
     }
@@ -35,12 +103,15 @@ class AuthService {
     // change it afterwards. If this write fails the Auth account still
     // exists without a users doc; acceptable while everything downstream is
     // mock data, but revisit (sign out + surface retry) before real data.
-    await FirebaseFirestore.instance.collection('users').doc(credential.user!.uid).set({
-      'name': name,
-      'email': email,
-      'role': null,
-      'createdAt': FieldValue.serverTimestamp(),
-    });
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(credential.user!.uid)
+        .set({
+          'name': name,
+          'email': email,
+          'role': null,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
   }
 
   /// The signed-in user's already-saved role, if any — checked right after
@@ -53,7 +124,8 @@ class AuthService {
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) return null;
-      final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      final doc =
+          await FirebaseFirestore.instance.collection('users').doc(uid).get();
       return switch (doc.data()?['role']) {
         'customer' => UserRole.customer,
         'provider' => UserRole.provider,
@@ -67,25 +139,74 @@ class AuthService {
 
   Future<void> signOut() => FirebaseAuth.instance.signOut();
 
-  /// Sends an SMS verification code to [phoneNumber]. On web (this app's
-  /// only tested platform), FirebaseAuth handles the reCAPTCHA challenge
-  /// itself with an invisible widget when no [RecaptchaVerifier] is passed.
-  Future<ConfirmationResult> sendPhoneVerificationCode(String phoneNumber) async {
+  /// Sends an SMS verification code using the API Firebase supports on the
+  /// current platform: reCAPTCHA-backed [FirebaseAuth.signInWithPhoneNumber]
+  /// on web and [FirebaseAuth.verifyPhoneNumber] on Android/iOS.
+  Future<PhoneVerificationSession> sendPhoneVerificationCode(
+    String phoneNumber,
+  ) async {
+    final auth = FirebaseAuth.instance;
     try {
-      return await FirebaseAuth.instance.signInWithPhoneNumber(phoneNumber);
+      if (kIsWeb) {
+        final confirmation = await auth.signInWithPhoneNumber(phoneNumber);
+        return _WebPhoneVerificationSession(confirmation);
+      }
+      if (defaultTargetPlatform != TargetPlatform.android &&
+          defaultTargetPlatform != TargetPlatform.iOS) {
+        throw const AuthException(
+          'Phone sign-in is available on Android, iOS, and web.',
+        );
+      }
+
+      final completer = Completer<PhoneVerificationSession>();
+      await auth.verifyPhoneNumber(
+        phoneNumber: phoneNumber,
+        verificationCompleted: (credential) async {
+          // If codeSent already completed the session, keep the UI on the
+          // explicit code path instead of silently signing in behind it.
+          if (completer.isCompleted) return;
+          try {
+            final userCredential = await auth.signInWithCredential(credential);
+            if (!completer.isCompleted) {
+              completer.complete(
+                _CompletedPhoneVerificationSession(userCredential),
+              );
+            }
+          } on FirebaseAuthException catch (e) {
+            if (!completer.isCompleted) {
+              completer.completeError(AuthException(_friendlyMessage(e)));
+            }
+          }
+        },
+        verificationFailed: (e) {
+          if (!completer.isCompleted) {
+            completer.completeError(AuthException(_friendlyMessage(e)));
+          }
+        },
+        codeSent: (verificationId, _) {
+          if (!completer.isCompleted) {
+            completer.complete(
+              _NativePhoneVerificationSession(auth, verificationId),
+            );
+          }
+        },
+        codeAutoRetrievalTimeout: (_) {},
+      );
+      return await completer.future;
     } on FirebaseAuthException catch (e) {
       throw AuthException(_friendlyMessage(e));
     }
   }
 
-  /// Confirms the code sent by [sendPhoneVerificationCode]. Same
-  /// role:null-on-first-sign-up behavior as [signUp] — a brand-new phone
-  /// user gets a `users/{uid}` doc; a returning one doesn't need one
-  /// rewritten.
-  Future<void> confirmPhoneCode({required ConfirmationResult confirmation, required String smsCode}) async {
+  /// Finishes phone sign-in and creates the same role-null profile used by
+  /// email sign-up for a brand-new account.
+  Future<void> confirmPhoneCode({
+    required PhoneVerificationSession session,
+    required String smsCode,
+  }) async {
     final UserCredential credential;
     try {
-      credential = await confirmation.confirm(smsCode);
+      credential = await session.confirm(smsCode);
     } on FirebaseAuthException catch (e) {
       throw AuthException(_friendlyMessage(e));
     }
@@ -103,14 +224,21 @@ class AuthService {
   static String _friendlyMessage(FirebaseAuthException e) {
     return switch (e.code) {
       'invalid-email' => 'That email address looks invalid.',
-      'email-already-in-use' => 'An account already exists for that email — try signing in.',
+      'email-already-in-use' =>
+        'An account already exists for that email — try signing in.',
       'weak-password' => 'Password is too weak — use at least 6 characters.',
-      'user-not-found' || 'wrong-password' || 'invalid-credential' => 'Email or password is incorrect.',
-      'network-request-failed' => 'Network error — check your connection and try again.',
+      'user-not-found' ||
+      'wrong-password' ||
+      'invalid-credential' => 'Email or password is incorrect.',
+      'network-request-failed' =>
+        'Network error — check your connection and try again.',
       'invalid-phone-number' => 'That phone number looks invalid.',
-      'too-many-requests' => 'Too many attempts — please wait a bit and try again.',
-      'invalid-verification-code' => 'That code is incorrect. Please try again.',
-      'code-expired' || 'session-expired' => 'That code expired — request a new one.',
+      'too-many-requests' =>
+        'Too many attempts — please wait a bit and try again.',
+      'invalid-verification-code' =>
+        'That code is incorrect. Please try again.',
+      'code-expired' ||
+      'session-expired' => 'That code expired — request a new one.',
       _ => 'Something went wrong (${e.code}). Please try again.',
     };
   }
