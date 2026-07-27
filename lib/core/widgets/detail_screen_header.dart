@@ -26,7 +26,10 @@ class DetailScreenHeader extends StatelessWidget {
             Align(
               alignment: Alignment.centerLeft,
               child: CupertinoButton(
-                minimumSize: const Size.square(44),
+                // Supports the repository's Dart/Flutter 3.29 floor while
+                // remaining valid on the 3.32 CI toolchain.
+                // ignore: deprecated_member_use
+                minSize: 44,
                 padding: EdgeInsets.zero,
                 onPressed: onBack ?? () => Navigator.of(context).pop(),
                 child: const Icon(
