@@ -21,7 +21,9 @@ if (hasReleaseSigning) {
 android {
     namespace = "com.example.at_your_service"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    // FlutterFire 6.x plugins require NDK 27. Keep the highest plugin
+    // requirement here because Android NDK releases are backward compatible.
+    ndkVersion = "27.0.12077973"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -38,7 +40,8 @@ android {
         applicationId = "com.example.at_your_service"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        // cloud_firestore 6.x requires Android API 23 or newer.
+        minSdk = 23
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
