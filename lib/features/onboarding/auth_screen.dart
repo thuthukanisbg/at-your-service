@@ -1,4 +1,3 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
@@ -52,16 +51,17 @@ class _AuthScreenState extends State<AuthScreen> {
     showAppBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (sheetContext) => _PhoneSignInSheet(
-        onVerified: () async {
-          Navigator.of(sheetContext).pop();
-          final savedRole = await AuthService.instance.fetchSavedRole();
-          if (!context.mounted) return;
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => _screenFor(savedRole)),
-          );
-        },
-      ),
+      builder:
+          (sheetContext) => _PhoneSignInSheet(
+            onVerified: () async {
+              Navigator.of(sheetContext).pop();
+              final savedRole = await AuthService.instance.fetchSavedRole();
+              if (!context.mounted) return;
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(builder: (_) => _screenFor(savedRole)),
+              );
+            },
+          ),
     );
   }
 
@@ -215,9 +215,10 @@ class _AuthScreenState extends State<AuthScreen> {
             ),
             const SizedBox(height: 8),
             PrimaryCtaButton(
-              label: _submitting
-                  ? (_signIn ? 'Signing In…' : 'Creating Account…')
-                  : (_signIn ? 'Sign In' : 'Create Account'),
+              label:
+                  _submitting
+                      ? (_signIn ? 'Signing In…' : 'Creating Account…')
+                      : (_signIn ? 'Sign In' : 'Create Account'),
               onPressed: _submitting ? null : _submit,
             ),
             const SizedBox(height: 18),
@@ -262,9 +263,12 @@ class _AuthScreenState extends State<AuthScreen> {
               padding: const EdgeInsets.only(top: 22),
               child: Center(
                 child: TextButton(
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const AdminLoginScreen()),
-                  ),
+                  onPressed:
+                      () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const AdminLoginScreen(),
+                        ),
+                      ),
                   child: Text(
                     'Admin? Sign in here',
                     style: TextStyle(
@@ -397,9 +401,8 @@ class _AuthTextField extends StatelessWidget {
   }
 }
 
-/// Two-step phone sign-in: enter a number, then the SMS code sent to it.
-/// On web (this app's only tested platform) FirebaseAuth shows its own
-/// invisible reCAPTCHA challenge automatically before sending the code.
+/// Two-step phone sign-in shared by web, Android, and iOS. [AuthService]
+/// chooses the platform-specific Firebase verification API.
 class _PhoneSignInSheet extends StatefulWidget {
   const _PhoneSignInSheet({required this.onVerified});
 
@@ -412,7 +415,7 @@ class _PhoneSignInSheet extends StatefulWidget {
 class _PhoneSignInSheetState extends State<_PhoneSignInSheet> {
   final _phoneController = TextEditingController();
   final _codeController = TextEditingController();
-  ConfirmationResult? _confirmation;
+  PhoneVerificationSession? _phoneSession;
   bool _submitting = false;
   String? _error;
 
@@ -434,12 +437,20 @@ class _PhoneSignInSheetState extends State<_PhoneSignInSheet> {
       _error = null;
     });
     try {
-      final confirmation = await AuthService.instance.sendPhoneVerificationCode(
+      final session = await AuthService.instance.sendPhoneVerificationCode(
         phone,
       );
       if (!mounted) return;
+      if (session.isAlreadyVerified) {
+        await AuthService.instance.confirmPhoneCode(
+          session: session,
+          smsCode: '',
+        );
+        await widget.onVerified();
+        return;
+      }
       setState(() {
-        _confirmation = confirmation;
+        _phoneSession = session;
         _submitting = false;
       });
     } on AuthException catch (e) {
@@ -469,7 +480,7 @@ class _PhoneSignInSheetState extends State<_PhoneSignInSheet> {
     });
     try {
       await AuthService.instance.confirmPhoneCode(
-        confirmation: _confirmation!,
+        session: _phoneSession!,
         smsCode: code,
       );
       await widget.onVerified();
@@ -491,7 +502,7 @@ class _PhoneSignInSheetState extends State<_PhoneSignInSheet> {
   @override
   Widget build(BuildContext context) {
     final tokens = context.tokens;
-    final codeStep = _confirmation != null;
+    final codeStep = _phoneSession != null;
     return Padding(
       padding: EdgeInsets.fromLTRB(
         20,
@@ -550,9 +561,8 @@ class _PhoneSignInSheetState extends State<_PhoneSignInSheet> {
             width: double.infinity,
             height: 50,
             child: ElevatedButton(
-              onPressed: _submitting
-                  ? null
-                  : (codeStep ? _verifyCode : _sendCode),
+              onPressed:
+                  _submitting ? null : (codeStep ? _verifyCode : _sendCode),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
