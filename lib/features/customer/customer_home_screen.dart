@@ -4,6 +4,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/utils/currency.dart';
+import '../../core/widgets/adaptive_bottom_sheet.dart';
 import '../../models/service_category.dart';
 import 'customer_categories_service.dart';
 import 'customer_mock_data.dart';
@@ -36,17 +37,17 @@ class CustomerHomeScreen extends StatefulWidget {
 }
 
 class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
-  late final Future<List<ServiceCategory>> _categoriesFuture = fetchActiveServiceCategories();
-  late final Future<bool> _hasUnreadFuture =
-      fetchMyNotifications().then((list) => list.any((n) => !n.read)).catchError((_) => false);
+  late final Future<List<ServiceCategory>> _categoriesFuture =
+      fetchActiveServiceCategories();
+  late final Future<bool> _hasUnreadFuture = fetchMyNotifications()
+      .then((list) => list.any((n) => !n.read))
+      .catchError((_) => false);
   String _location = _availableLocations.first;
 
   Future<void> _openLocationPicker(BuildContext context) async {
     final tokens = context.tokens;
-    final selected = await showModalBottomSheet<String>(
+    final selected = await showAppBottomSheet<String>(
       context: context,
-      backgroundColor: tokens.surface,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (sheetContext) {
         return SafeArea(
           child: Padding(
@@ -58,7 +59,11 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                   padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
                   child: Text(
                     'Choose your location',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: tokens.tx),
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: tokens.tx,
+                    ),
                   ),
                 ),
                 for (final location in _availableLocations)
@@ -66,10 +71,25 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                     leading: Icon(
                       LucideIcons.mapPin,
                       size: 20,
-                      color: location == _location ? AppColors.primary : tokens.mut,
+                      color: location == _location
+                          ? AppColors.primary
+                          : tokens.mut,
                     ),
-                    title: Text(location, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: tokens.tx)),
-                    trailing: location == _location ? const Icon(LucideIcons.check, size: 18, color: AppColors.primary) : null,
+                    title: Text(
+                      location,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: tokens.tx,
+                      ),
+                    ),
+                    trailing: location == _location
+                        ? const Icon(
+                            LucideIcons.check,
+                            size: 18,
+                            color: AppColors.primary,
+                          )
+                        : null,
                     onTap: () => Navigator.of(sheetContext).pop(location),
                   ),
               ],
@@ -85,14 +105,16 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
 
   void _openServicesList(BuildContext context, String title) {
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => CustomerServicesListScreen(title: title)),
+      MaterialPageRoute(
+        builder: (_) => CustomerServicesListScreen(title: title),
+      ),
     );
   }
 
   void _goToService(BuildContext context) {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const ServiceDetailsScreen()),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const ServiceDetailsScreen()));
   }
 
   void _openNotifications(BuildContext context) {
@@ -102,19 +124,19 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   }
 
   void _openSearch(BuildContext context) {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const CustomerSearchScreen()),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const CustomerSearchScreen()));
   }
 
   Future<void> _openFilters(BuildContext context) async {
-    final categories = await _categoriesFuture.catchError((_) => customerCategories);
+    final categories = await _categoriesFuture.catchError(
+      (_) => customerCategories,
+    );
     if (!context.mounted) return;
     final tokens = context.tokens;
-    await showModalBottomSheet<void>(
+    await showAppBottomSheet<void>(
       context: context,
-      backgroundColor: tokens.surface,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (sheetContext) {
         return SafeArea(
           child: Padding(
@@ -126,18 +148,36 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                   padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
                   child: Text(
                     'Filter by category',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: tokens.tx),
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: tokens.tx,
+                    ),
                   ),
                 ),
                 for (final category in categories)
                   ListTile(
-                    leading: Icon(category.icon, size: 20, color: category.tint),
-                    title: Text(category.name, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: tokens.tx)),
+                    leading: Icon(
+                      category.icon,
+                      size: 20,
+                      color: category.tint,
+                    ),
+                    title: Text(
+                      category.name,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: tokens.tx,
+                      ),
+                    ),
                     onTap: () {
                       Navigator.of(sheetContext).pop();
                       Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) => CustomerSearchScreen(initialCategoryId: category.id, initialCategoryName: category.name),
+                          builder: (_) => CustomerSearchScreen(
+                            initialCategoryId: category.id,
+                            initialCategoryName: category.name,
+                          ),
                         ),
                       );
                     },
@@ -172,26 +212,44 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(LucideIcons.mapPin, size: 13, color: AppColors.primary),
+                            const Icon(
+                              LucideIcons.mapPin,
+                              size: 13,
+                              color: AppColors.primary,
+                            ),
                             const SizedBox(width: 5),
                             Flexible(
                               child: Text(
                                 _location,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: tokens.mut),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: tokens.mut,
+                                ),
                               ),
                             ),
-                            Icon(LucideIcons.chevronDown, size: 13, color: tokens.mut),
+                            Icon(
+                              LucideIcons.chevronDown,
+                              size: 13,
+                              color: tokens.mut,
+                            ),
                           ],
                         ),
                       ),
                       const SizedBox(height: 8),
                       Text(
                         'Hello, Thandi 👋',
-                        style: theme.textTheme.headlineSmall?.copyWith(fontSize: 22, letterSpacing: -0.5),
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          fontSize: 22,
+                          letterSpacing: -0.5,
+                        ),
                       ),
-                      Text('How can we help you today?', style: theme.textTheme.bodyLarge),
+                      Text(
+                        'How can we help you today?',
+                        style: theme.textTheme.bodyLarge,
+                      ),
                     ],
                   ),
                 ),
@@ -228,7 +286,11 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                               'Search for a service…',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: tokens.mut),
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                color: tokens.mut,
+                              ),
                             ),
                           ),
                         ],
@@ -247,13 +309,20 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                       color: AppColors.primary,
                       borderRadius: BorderRadius.circular(14),
                     ),
-                    child: const Icon(LucideIcons.slidersHorizontal, size: 19, color: Colors.white),
+                    child: const Icon(
+                      LucideIcons.slidersHorizontal,
+                      size: 19,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 22),
-            _RowHeader(title: 'Popular Services', onViewAll: () => _openServicesList(context, 'Popular Services')),
+            _RowHeader(
+              title: 'Popular Services',
+              onViewAll: () => _openServicesList(context, 'Popular Services'),
+            ),
             const SizedBox(height: 13),
             FutureBuilder<List<ServiceCategory>>(
               future: _categoriesFuture,
@@ -261,10 +330,14 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                 if (!snapshot.hasData && !snapshot.hasError) {
                   return const SizedBox(
                     height: 96,
-                    child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
+                    child: Center(
+                      child: CircularProgressIndicator(strokeWidth: 2.4),
+                    ),
                   );
                 }
-                final categories = snapshot.hasError ? customerCategories : snapshot.data!;
+                final categories = snapshot.hasError
+                    ? customerCategories
+                    : snapshot.data!;
                 return Row(
                   children: [
                     for (final category in categories) ...[
@@ -274,7 +347,8 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                           onTap: () => _goToService(context),
                         ),
                       ),
-                      if (category != categories.last) const SizedBox(width: 10),
+                      if (category != categories.last)
+                        const SizedBox(width: 10),
                     ],
                   ],
                 );
@@ -283,7 +357,10 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
             const SizedBox(height: 24),
             _PromoCard(onTap: () => _goToService(context)),
             const SizedBox(height: 24),
-            _RowHeader(title: 'Recommended', onViewAll: () => _openServicesList(context, 'Recommended')),
+            _RowHeader(
+              title: 'Recommended',
+              onViewAll: () => _openServicesList(context, 'Recommended'),
+            ),
             const SizedBox(height: 13),
             _RecommendedCard(onTap: () => _goToService(context)),
           ],
@@ -324,7 +401,10 @@ class _NotificationButton extends StatelessWidget {
                 child: Container(
                   width: 7,
                   height: 7,
-                  decoration: const BoxDecoration(color: AppColors.danger, shape: BoxShape.circle),
+                  decoration: const BoxDecoration(
+                    color: AppColors.danger,
+                    shape: BoxShape.circle,
+                  ),
                 ),
               ),
           ],
@@ -351,14 +431,22 @@ class _RowHeader extends StatelessWidget {
             title,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: tokens.tx),
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+              color: tokens.tx,
+            ),
           ),
         ),
         InkWell(
           onTap: onViewAll,
           child: const Text(
             'View all',
-            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.primary),
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w700,
+              color: AppColors.primary,
+            ),
           ),
         ),
       ],
@@ -401,14 +489,22 @@ class _CategoryTile extends StatelessWidget {
               category.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: tokens.tx),
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+                color: tokens.tx,
+              ),
             ),
             if (category.price != null)
               Text(
                 'From ${category.price}',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w600, color: tokens.mut),
+                style: TextStyle(
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w600,
+                  color: tokens.mut,
+                ),
               ),
           ],
         ),
@@ -453,17 +549,29 @@ class _PromoCard extends StatelessWidget {
                 children: [
                   const Text(
                     'Book a trusted pro today',
-                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: Colors.white, height: 1.25),
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                      height: 1.25,
+                    ),
                   ),
                   Padding(
                     padding: const EdgeInsets.only(top: 5, bottom: 13),
                     child: Text(
                       'Get the job done right, the first time.',
-                      style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500, color: Colors.white.withValues(alpha: 0.85)),
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.white.withValues(alpha: 0.85),
+                      ),
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 9,
+                    ),
                     decoration: BoxDecoration(
                       color: AppColors.accent,
                       borderRadius: BorderRadius.circular(11),
@@ -473,10 +581,18 @@ class _PromoCard extends StatelessWidget {
                       children: [
                         Text(
                           'Book Now',
-                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.accentOnAccent),
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.accentOnAccent,
+                          ),
                         ),
                         SizedBox(width: 6),
-                        Icon(LucideIcons.arrowRight, size: 15, color: AppColors.accentOnAccent),
+                        Icon(
+                          LucideIcons.arrowRight,
+                          size: 15,
+                          color: AppColors.accentOnAccent,
+                        ),
                       ],
                     ),
                   ),
@@ -491,7 +607,11 @@ class _PromoCard extends StatelessWidget {
                 color: Colors.white.withValues(alpha: 0.14),
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: const Icon(LucideIcons.hardHat, size: 40, color: Colors.white),
+              child: const Icon(
+                LucideIcons.hardHat,
+                size: 40,
+                color: Colors.white,
+              ),
             ),
           ],
         ),
@@ -526,7 +646,11 @@ class _RecommendedCard extends StatelessWidget {
               height: 120,
               width: double.infinity,
               color: tokens.elev,
-              child: const Icon(LucideIcons.sparkles, size: 32, color: AppColors.primary),
+              child: const Icon(
+                LucideIcons.sparkles,
+                size: 32,
+                color: AppColors.primary,
+              ),
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 13),
@@ -541,28 +665,48 @@ class _RecommendedCard extends StatelessWidget {
                           listing.title,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: tokens.tx),
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            color: tokens.tx,
+                          ),
                         ),
                       ),
                       Text(
                         'From ${formatRand(listing.priceFrom)}',
-                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.primary),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.primary,
+                        ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 6),
                   Row(
                     children: [
-                      const Icon(LucideIcons.star, size: 14, color: AppColors.accent),
+                      const Icon(
+                        LucideIcons.star,
+                        size: 14,
+                        color: AppColors.accent,
+                      ),
                       const SizedBox(width: 5),
                       Text(
                         '${listing.rating}',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: tokens.tx),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: tokens.tx,
+                        ),
                       ),
                       const SizedBox(width: 4),
                       Text(
                         '(${listing.reviewCount} reviews)',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: tokens.mut),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: tokens.mut,
+                        ),
                       ),
                     ],
                   ),

@@ -58,10 +58,17 @@ Future<void> _skipToChooser(WidgetTester tester) async {
 /// live Firebase app, which widget tests don't have.
 class _StubAuthService extends AuthService {
   @override
-  Future<void> signIn({required String email, required String password}) async {}
+  Future<void> signIn({
+    required String email,
+    required String password,
+  }) async {}
 
   @override
-  Future<void> signUp({required String name, required String email, required String password}) async {}
+  Future<void> signUp({
+    required String name,
+    required String email,
+    required String password,
+  }) async {}
 }
 
 /// Succeeds without touching Firebase — real booking creation needs a live
@@ -73,6 +80,7 @@ class _StubBookingService extends BookingService {
     required String serviceName,
     required num price,
     required DateTime scheduledFor,
+    required String address,
     String? notes,
   }) async => 'test-booking-id';
 }
@@ -83,13 +91,19 @@ void main() {
     BookingService.instance = _StubBookingService();
   });
 
-  testWidgets('customer home Recommended card opens Service Details', (tester) async {
+  testWidgets('customer home Recommended card opens Service Details', (
+    tester,
+  ) async {
     await tester.pumpWidget(const AtYourServiceApp());
     await _skipToChooser(tester);
     await tester.tap(find.text('Customer'));
     await tester.pumpAndSettle();
 
-    await tester.scrollUntilVisible(find.text('Deep House Cleaning'), 300, scrollable: find.byType(Scrollable));
+    await tester.scrollUntilVisible(
+      find.text('Deep House Cleaning'),
+      300,
+      scrollable: find.byType(Scrollable),
+    );
     await tester.tap(find.text('Deep House Cleaning'));
     await tester.pumpAndSettle();
 
@@ -97,7 +111,9 @@ void main() {
     expect(find.text('Kitchen deep clean'), findsOneWidget);
   });
 
-  testWidgets('Messages tab loads gracefully without a live Firebase app', (tester) async {
+  testWidgets('Messages tab loads gracefully without a live Firebase app', (
+    tester,
+  ) async {
     await tester.pumpWidget(const AtYourServiceApp());
     await _skipToChooser(tester);
     await tester.tap(find.text('Customer'));
@@ -130,31 +146,59 @@ void main() {
     expect(find.text('Select Date'), findsOneWidget);
   });
 
-  testWidgets('Book & Schedule carries the selected date/time into Review & Pay', (tester) async {
-    await tester.pumpWidget(_harness(const BookScheduleScreen(serviceName: 'Deep House Cleaning', price: 600)));
+  testWidgets('Book & Schedule carries its details into Review Booking', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _harness(
+        BookScheduleScreen(
+          serviceName: 'Deep House Cleaning',
+          price: 600,
+          now: DateTime(2026, 7, 27),
+        ),
+      ),
+    );
 
-    await tester.tap(find.text('22'));
+    await tester.tap(find.text('29'));
     await tester.pump();
-    await tester.tap(find.text('02:00 PM'));
+    await tester.tap(find.text('2:00 PM'));
     await tester.pump();
+    await tester.enterText(
+      find.byType(TextField).first,
+      '23 Loop Street, Cape Town',
+    );
+    await tester.drag(find.byType(ListView), const Offset(0, -500));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Review & Pay'), findsOneWidget);
-    expect(find.text('22 May 2024'), findsOneWidget);
-    expect(find.text('02:00 PM'), findsOneWidget);
+    expect(find.text('Review Booking'), findsOneWidget);
+    expect(find.text('29 Jul 2026'), findsOneWidget);
+    expect(find.text('2:00 PM'), findsOneWidget);
+    expect(find.text('23 Loop Street, Cape Town'), findsOneWidget);
   });
 
-  testWidgets('Review & Pay Confirm & Pay opens Track Booking', (tester) async {
+  testWidgets('Review Booking confirms without claiming to take payment', (
+    tester,
+  ) async {
     await tester.pumpWidget(
-      _harness(const ReviewPayScreen(selectedDate: '21 May', selectedTime: '10:00 AM', serviceName: 'Deep House Cleaning', price: 600)),
+      _harness(
+        ReviewPayScreen(
+          scheduledFor: DateTime(2026, 7, 28, 10),
+          address: '23 Loop Street, Cape Town',
+          serviceName: 'Deep House Cleaning',
+          price: 600,
+        ),
+      ),
     );
 
     expect(find.text('R600'), findsWidgets);
+    expect(
+      find.textContaining('Online payments are not enabled yet'),
+      findsOneWidget,
+    );
 
-    await tester.tap(find.text('Instant EFT'));
-    await tester.pump();
-    await tester.tap(find.text('Confirm & Pay R600'));
+    await tester.tap(find.text('Confirm Booking'));
     // Track Booking runs an infinite pulse animation, so avoid pumpAndSettle.
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
@@ -168,13 +212,19 @@ void main() {
     expect(find.text('Sipho M.'), findsNothing);
   });
 
-  testWidgets('Track Booking Mark as complete opens Rate & Review', (tester) async {
+  testWidgets('Track Booking Mark as complete opens Rate & Review', (
+    tester,
+  ) async {
     await tester.pumpWidget(_harness(const TrackBookingScreen()));
     await tester.pump();
 
     expect(find.text('Booking confirmed'), findsOneWidget);
 
-    await tester.scrollUntilVisible(find.text('Mark as complete & rate'), 300, scrollable: find.byType(Scrollable));
+    await tester.scrollUntilVisible(
+      find.text('Mark as complete & rate'),
+      300,
+      scrollable: find.byType(Scrollable),
+    );
     await tester.tap(find.text('Mark as complete & rate'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
@@ -182,70 +232,102 @@ void main() {
     expect(find.text('Rate & Review'), findsOneWidget);
   });
 
-  testWidgets('Track Booking Report a problem opens the dispute filing screen on a real booking', (tester) async {
-    // Only real bookings (bookingId/customerId/providerId all set) show the
-    // "Report a problem" action — the pure-demo entry point (no constructor
-    // params) has no real booking to attach a report to.
-    await tester.pumpWidget(_harness(const TrackBookingScreen(
-      bookingId: 'booking-1',
-      customerId: 'customer-1',
-      providerId: 'provider-1',
-      serviceName: 'Deep House Cleaning',
-      otherPartyName: 'Sipho M.',
-    )));
-    await tester.pump();
-
-    await tester.scrollUntilVisible(find.text('Report a problem'), 300, scrollable: find.byType(Scrollable));
-    await tester.tap(find.text('Report a problem'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Report a Problem'), findsOneWidget);
-    expect(find.text('Deep House Cleaning'), findsOneWidget);
-    // Priority defaults to Medium.
-    expect(find.text('Medium'), findsOneWidget);
-  });
-
-  testWidgets('Rate & Review star selection and Submit pops back to the caller', (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.dark(),
-        builder: (context, child) => MobileFrame(child: child!),
-        home: Builder(
-          builder: (context) => Scaffold(
-            body: Center(
-              child: ElevatedButton(
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const RateReviewScreen()),
-                ),
-                child: const Text('open rate screen'),
-              ),
-            ),
+  testWidgets(
+    'Track Booking Report a problem opens the dispute filing screen on a real booking',
+    (tester) async {
+      // Only real bookings (bookingId/customerId/providerId all set) show the
+      // "Report a problem" action — the pure-demo entry point (no constructor
+      // params) has no real booking to attach a report to.
+      await tester.pumpWidget(
+        _harness(
+          const TrackBookingScreen(
+            bookingId: 'booking-1',
+            customerId: 'customer-1',
+            providerId: 'provider-1',
+            serviceName: 'Deep House Cleaning',
+            otherPartyName: 'Sipho M.',
           ),
         ),
-      ),
-    );
+      );
+      await tester.pump();
 
-    await tester.tap(find.text('open rate screen'));
-    await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Report a problem'),
+        300,
+        scrollable: find.byType(Scrollable),
+      );
+      await tester.tap(find.text('Report a problem'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('Sipho M.'), findsOneWidget);
-    expect(find.text('Professional'), findsOneWidget);
+      expect(find.text('Report a Problem'), findsOneWidget);
+      expect(find.text('Deep House Cleaning'), findsOneWidget);
+      // Priority defaults to Medium.
+      expect(find.text('Medium'), findsOneWidget);
+    },
+  );
 
-    final stars = find.byIcon(LucideIcons.star);
-    expect(stars, findsNWidgets(5));
-    await tester.tap(stars.at(2)); // select the 3rd star
-    await tester.pump();
+  testWidgets(
+    'Rate & Review star selection and Submit pops back to the caller',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.dark(),
+          builder: (context, child) => MobileFrame(child: child!),
+          home: Builder(
+            builder:
+                (context) => Scaffold(
+                  body: Center(
+                    child: ElevatedButton(
+                      onPressed:
+                          () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const RateReviewScreen(),
+                            ),
+                          ),
+                      child: const Text('open rate screen'),
+                    ),
+                  ),
+                ),
+          ),
+        ),
+      );
 
-    // Quick-tag chips toggle selected state on tap.
-    final tagContainer = find.ancestor(of: find.text('Professional'), matching: find.byType(Container)).first;
-    expect((tester.widget<Container>(tagContainer).decoration as BoxDecoration).color, isNot(AppColors.primary));
-    await tester.tap(find.text('Professional'));
-    await tester.pump();
-    expect((tester.widget<Container>(tagContainer).decoration as BoxDecoration).color, AppColors.primary);
+      await tester.tap(find.text('open rate screen'));
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Submit Review'));
-    await tester.pumpAndSettle();
+      expect(find.text('Sipho M.'), findsOneWidget);
+      expect(find.text('Professional'), findsOneWidget);
 
-    expect(find.text('open rate screen'), findsOneWidget);
-  });
+      final stars = find.byIcon(LucideIcons.star);
+      expect(stars, findsNWidgets(5));
+      await tester.tap(stars.at(2)); // select the 3rd star
+      await tester.pump();
+
+      // Quick-tag chips toggle selected state on tap.
+      final tagContainer =
+          find
+              .ancestor(
+                of: find.text('Professional'),
+                matching: find.byType(Container),
+              )
+              .first;
+      expect(
+        (tester.widget<Container>(tagContainer).decoration as BoxDecoration)
+            .color,
+        isNot(AppColors.primary),
+      );
+      await tester.tap(find.text('Professional'));
+      await tester.pump();
+      expect(
+        (tester.widget<Container>(tagContainer).decoration as BoxDecoration)
+            .color,
+        AppColors.primary,
+      );
+
+      await tester.tap(find.text('Submit Review'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('open rate screen'), findsOneWidget);
+    },
+  );
 }

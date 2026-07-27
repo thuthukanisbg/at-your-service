@@ -1,6 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Firebase and the marketplace data layer require network access in
+         release builds as well as debug/profile builds. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <application
-        android:label="at_your_service"
+        android:label="At Your Service"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

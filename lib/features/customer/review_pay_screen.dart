@@ -1,22 +1,20 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:lucide_icons/lucide_icons.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/utils/currency.dart';
+import '../../core/utils/schedule_format.dart';
 import '../../core/widgets/detail_screen_header.dart';
 import '../../core/widgets/primary_cta_button.dart';
 import 'booking_service.dart';
 import 'track_booking_screen.dart';
 
-enum _PayMethod { card, eft }
-
 class ReviewPayScreen extends StatefulWidget {
   const ReviewPayScreen({
     super.key,
-    required this.selectedDate,
-    required this.selectedTime,
+    required this.scheduledFor,
+    required this.address,
     required this.serviceName,
     required this.price,
     this.serviceId,
@@ -25,8 +23,8 @@ class ReviewPayScreen extends StatefulWidget {
 
   static const routeName = '/customer/pay';
 
-  final String selectedDate;
-  final String selectedTime;
+  final DateTime scheduledFor;
+  final String address;
   final String serviceName;
   final num price;
   final String? serviceId;
@@ -37,18 +35,17 @@ class ReviewPayScreen extends StatefulWidget {
 }
 
 class _ReviewPayScreenState extends State<ReviewPayScreen> {
-  _PayMethod _method = _PayMethod.card;
   bool _submitting = false;
 
-  Future<void> _confirmAndPay() async {
+  Future<void> _confirmBooking() async {
     setState(() => _submitting = true);
     try {
-      final scheduledFor = parseScheduledFor(widget.selectedDate, widget.selectedTime);
       final bookingId = await BookingService.instance.createBooking(
         serviceId: widget.serviceId,
         serviceName: widget.serviceName,
         price: widget.price,
-        scheduledFor: scheduledFor,
+        scheduledFor: widget.scheduledFor,
+        address: widget.address,
         notes: widget.notes,
       );
       if (!mounted) return;
@@ -76,12 +73,16 @@ class _ReviewPayScreenState extends State<ReviewPayScreen> {
     } on BookingException catch (e) {
       if (!mounted) return;
       setState(() => _submitting = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     } catch (_) {
       if (!mounted) return;
       setState(() => _submitting = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Couldn't confirm your booking — please try again.")),
+        const SnackBar(
+          content: Text("Couldn't confirm your booking — please try again."),
+        ),
       );
     }
   }
@@ -91,9 +92,9 @@ class _ReviewPayScreenState extends State<ReviewPayScreen> {
     final tokens = context.tokens;
     final summary = [
       ('Service', widget.serviceName),
-      ('Date', '${widget.selectedDate} 2024'),
-      ('Time', widget.selectedTime),
-      ('Address', '23 Loop Street, Cape Town'),
+      ('Date', formatScheduleDate(widget.scheduledFor)),
+      ('Time', formatScheduleTime(widget.scheduledFor)),
+      ('Address', widget.address),
     ];
     return Scaffold(
       body: SafeArea(
@@ -102,7 +103,7 @@ class _ReviewPayScreenState extends State<ReviewPayScreen> {
           children: [
             const Padding(
               padding: EdgeInsets.only(bottom: 18),
-              child: DetailScreenHeader(title: 'Review & Pay'),
+              child: DetailScreenHeader(title: 'Review Booking'),
             ),
             Container(
               margin: const EdgeInsets.only(bottom: 16),
@@ -117,17 +118,30 @@ class _ReviewPayScreenState extends State<ReviewPayScreen> {
                   for (final row in summary)
                     Container(
                       padding: const EdgeInsets.symmetric(vertical: 12),
-                      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: tokens.line))),
+                      decoration: BoxDecoration(
+                        border: Border(bottom: BorderSide(color: tokens.line)),
+                      ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(row.$1, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: tokens.mut)),
+                          Text(
+                            row.$1,
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: tokens.mut,
+                            ),
+                          ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
                               row.$2,
                               textAlign: TextAlign.right,
-                              style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: tokens.tx),
+                              style: TextStyle(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w700,
+                                color: tokens.tx,
+                              ),
                             ),
                           ),
                         ],
@@ -138,93 +152,50 @@ class _ReviewPayScreenState extends State<ReviewPayScreen> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Total', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: tokens.tx)),
-                        Text(formatRand(widget.price), style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: AppColors.primary)),
+                        Text(
+                          'Total',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                            color: tokens.tx,
+                          ),
+                        ),
+                        Text(
+                          formatRand(widget.price),
+                          style: const TextStyle(
+                            fontSize: 19,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.primary,
+                          ),
+                        ),
                       ],
                     ),
                   ),
                 ],
               ),
             ),
-            Text('Payment Method', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: tokens.tx)),
-            const SizedBox(height: 11),
-            _PayMethodTile(
-              icon: LucideIcons.creditCard,
-              label: 'Visa •••• 4242',
-              selected: _method == _PayMethod.card,
-              onTap: () => setState(() => _method = _PayMethod.card),
-            ),
-            const SizedBox(height: 10),
-            _PayMethodTile(
-              icon: LucideIcons.building2,
-              label: 'Instant EFT',
-              selected: _method == _PayMethod.eft,
-              onTap: () => setState(() => _method = _PayMethod.eft),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: tokens.elev,
+                border: Border.all(color: tokens.line),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Text(
+                'Online payments are not enabled yet. Confirming creates the booking, but you will not be charged.',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  height: 1.4,
+                  fontWeight: FontWeight.w600,
+                  color: tokens.mut,
+                ),
+              ),
             ),
             const SizedBox(height: 24),
             PrimaryCtaButton(
-              label: _submitting ? 'Confirming…' : 'Confirm & Pay ${formatRand(widget.price)}',
-              icon: LucideIcons.lock,
-              iconSize: 17,
-              onPressed: _submitting ? null : _confirmAndPay,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PayMethodTile extends StatelessWidget {
-  const _PayMethodTile({required this.icon, required this.label, required this.selected, required this.onTap});
-
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = context.tokens;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(13),
-        decoration: BoxDecoration(
-          color: tokens.card,
-          border: Border.all(color: selected ? AppColors.primary : tokens.line, width: 1.5),
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 38,
-              height: 26,
-              decoration: BoxDecoration(color: tokens.chip, borderRadius: BorderRadius.circular(6)),
-              child: Icon(icon, size: 17, color: tokens.tx),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(label, style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: tokens.tx)),
-            ),
-            Container(
-              width: 20,
-              height: 20,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: selected ? AppColors.primary : tokens.mut, width: 2),
-              ),
-              child: selected
-                  ? Center(
-                      child: Container(
-                        width: 10,
-                        height: 10,
-                        decoration: const BoxDecoration(shape: BoxShape.circle, color: AppColors.primary),
-                      ),
-                    )
-                  : null,
+              label: _submitting ? 'Confirming…' : 'Confirm Booking',
+              onPressed: _submitting ? null : _confirmBooking,
             ),
           ],
         ),

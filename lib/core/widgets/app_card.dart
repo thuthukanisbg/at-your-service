@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../platform/platform_design.dart';
+
 /// A themed [Card] with consistent internal padding, used across all roles.
 class AppCard extends StatelessWidget {
   const AppCard({
@@ -22,7 +24,7 @@ class AppCard extends StatelessWidget {
     return Card(
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(context.cardRadius),
         child: content,
       ),
     );

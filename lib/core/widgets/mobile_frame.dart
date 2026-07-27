@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../platform/platform_design.dart';
+
 /// At Your Service is a mobile marketplace app. On an actual phone this is
 /// a no-op. On a wider viewport (running in a desktop browser during
 /// development) it constrains content to a phone-width column on a neutral
@@ -86,8 +88,8 @@ class MobileFrame extends StatelessWidget {
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(
-                        42,
-                      ), // handoff's phone-screen radius
+                        context.phonePreviewRadius,
+                      ),
                       child: child,
                     ),
                   ),
