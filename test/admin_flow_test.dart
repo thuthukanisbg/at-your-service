@@ -8,6 +8,8 @@ import 'package:at_your_service/core/theme/app_theme.dart';
 import 'package:at_your_service/core/theme/theme_mode_controller.dart';
 import 'package:at_your_service/core/widgets/mobile_frame.dart';
 import 'package:at_your_service/features/admin/admin_dashboard_screen.dart';
+import 'package:at_your_service/features/admin/admin_management_service.dart';
+import 'package:at_your_service/features/admin/admin_responsive_table.dart';
 import 'package:at_your_service/models/user_role.dart';
 
 Widget _harness(Widget screen) {
@@ -66,9 +68,29 @@ class _StubAuthService extends AuthService {
   Future<UserRole?> fetchSavedRole() async => UserRole.admin;
 }
 
+class _StubAdminManagementService extends AdminManagementService {
+  ManagedUserInput? createdUser;
+  ServiceCategoryInput? createdCategory;
+
+  @override
+  Future<ManagedUserResult> createManagedUser(ManagedUserInput input) async {
+    createdUser = input;
+    return const ManagedUserResult(passwordSetupEmailSent: true);
+  }
+
+  @override
+  Future<void> createServiceCategory(ServiceCategoryInput input) async {
+    createdCategory = input;
+  }
+}
+
 void main() {
+  late _StubAdminManagementService adminManagement;
+
   setUp(() {
     AuthService.instance = _StubAuthService();
+    adminManagement = _StubAdminManagementService();
+    AdminManagementService.instance = adminManagement;
   });
 
   testWidgets('admin dashboard shows stats and pending applicants', (
@@ -201,6 +223,127 @@ void main() {
       expect(find.text("Couldn't load providers."), findsOneWidget);
     },
   );
+
+  testWidgets('desktop admin can add a provider without leaving admin', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(const AtYourServiceApp());
+    await _signInToAdmin(tester);
+
+    await tester.tap(find.byIcon(LucideIcons.users).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add provider'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Creates the account and sends a secure password setup email.'),
+      findsOneWidget,
+    );
+    expect(find.byType(TextFormField), findsNWidgets(5));
+
+    await tester.enterText(find.byType(TextFormField).at(0), 'Nomsa Dlamini');
+    await tester.enterText(
+      find.byType(TextFormField).at(1),
+      'nomsa@example.com',
+    );
+    await tester.enterText(find.byType(TextFormField).at(2), 'Cleaning');
+    await tester.enterText(find.byType(TextFormField).at(3), 'Durban');
+    await tester.enterText(find.byType(TextFormField).at(4), '4');
+    await tester.tap(find.widgetWithText(FilledButton, 'Add provider'));
+    await tester.pumpAndSettle();
+
+    expect(adminManagement.createdUser?.role, UserRole.provider);
+    expect(adminManagement.createdUser?.category, 'Cleaning');
+    expect(
+      find.text('Provider added. A password setup email was sent.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('desktop admin can add a customer', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(const AtYourServiceApp());
+    await _signInToAdmin(tester);
+
+    await tester.tap(find.byIcon(LucideIcons.user).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add customer'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(TextFormField), findsNWidgets(2));
+    await tester.enterText(find.byType(TextFormField).at(0), 'Lebo Mokoena');
+    await tester.enterText(
+      find.byType(TextFormField).at(1),
+      'lebo@example.com',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Add customer'));
+    await tester.pumpAndSettle();
+
+    expect(adminManagement.createdUser?.role, UserRole.customer);
+    expect(adminManagement.createdUser?.name, 'Lebo Mokoena');
+  });
+
+  testWidgets('desktop admin can add a service category', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(const AtYourServiceApp());
+    await _signInToAdmin(tester);
+
+    await tester.tap(find.byIcon(LucideIcons.tag).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add category'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextFormField), 'Gardening');
+    await tester.tap(find.widgetWithText(FilledButton, 'Add category'));
+    await tester.pumpAndSettle();
+
+    expect(adminManagement.createdCategory?.name, 'Gardening');
+    expect(adminManagement.createdCategory?.active, isTrue);
+  });
+
+  testWidgets('admin data tables fill the available desktop width', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 900,
+              child: AdminResponsiveDataTable(
+                table: DataTable(
+                  columns: const [
+                    DataColumn(label: Text('Name')),
+                    DataColumn(label: Text('Status')),
+                  ],
+                  rows: const [
+                    DataRow(
+                      cells: [
+                        DataCell(Text('Example')),
+                        DataCell(Text('Active')),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(tester.getSize(find.byType(DataTable)).width, 900);
+  });
 
   testWidgets(
     'desktop Customers tab loads (or falls back gracefully without a live Firebase app)',
