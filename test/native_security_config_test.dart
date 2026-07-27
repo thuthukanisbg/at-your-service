@@ -39,4 +39,16 @@ void main() {
       ),
     );
   });
+
+  test('admin-managed profiles are limited to customer and provider roles', () {
+    final rules = File('firestore.rules').readAsStringSync();
+
+    expect(
+      rules,
+      contains(
+        "isAdmin()\n"
+        "                && request.resource.data.role in ['customer', 'provider']",
+      ),
+    );
+  });
 }
