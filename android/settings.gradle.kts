@@ -22,7 +22,9 @@ plugins {
     // START: FlutterFire Configuration
     id("com.google.gms.google-services") version("4.3.15") apply false
     // END: FlutterFire Configuration
-    id("org.jetbrains.kotlin.android") version "1.8.22" apply false
+    // FlutterFire Functions 6.x uses Kotlin's typed compilerOptions API,
+    // which requires Kotlin Gradle Plugin 2.0 or newer.
+    id("org.jetbrains.kotlin.android") version "2.0.0" apply false
 }
 
 include(":app")

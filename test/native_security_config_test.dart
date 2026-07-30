@@ -5,9 +5,14 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('Android native settings meet the FlutterFire minimums', () {
     final gradle = File('android/app/build.gradle.kts').readAsStringSync();
+    final settings = File('android/settings.gradle.kts').readAsStringSync();
 
     expect(gradle, contains('ndkVersion = "27.0.12077973"'));
     expect(gradle, contains('minSdk = 23'));
+    expect(
+      settings,
+      contains('id("org.jetbrains.kotlin.android") version "2.0.0"'),
+    );
   });
 
   test('iOS deployment target is consistently set to 15.0', () {
