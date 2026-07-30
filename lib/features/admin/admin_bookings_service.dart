@@ -31,6 +31,8 @@ class AdminBookingSummary {
 /// data (confirmed in provider_jobs_service.dart's own comment).
 String _displayStatus(String raw) => switch (raw) {
   'pending' => 'Pending',
+  'accepted' => 'Accepted',
+  'en_route' => 'En Route',
   'completed' => 'Completed',
   'confirmed' => 'Confirmed',
   'in_progress' => 'In Progress',
@@ -47,38 +49,82 @@ String _displayStatus(String raw) => switch (raw) {
 /// the `providers` collection's own `displayName` field — a small, batched
 /// join, not a per-row query.
 Future<List<AdminBookingSummary>> fetchAllBookings() async {
-  final snapshot = await FirebaseFirestore.instance.collection('bookings').get();
-  final docs = snapshot.docs;
+  final snapshot =
+      await FirebaseFirestore.instance.collection('bookings').get();
+  return _summariesFromDocs(snapshot.docs);
+}
 
-  final customerIds = docs.map((d) => d.data()['customerId'] as String?).whereType<String>().toSet();
-  final providerIds = docs.map((d) => d.data()['providerId'] as String?).whereType<String>().toSet();
+/// Live platform-wide feed for operational monitoring.
+Stream<List<AdminBookingSummary>> watchAllBookings() {
+  try {
+    return FirebaseFirestore.instance
+        .collection('bookings')
+        .snapshots()
+        .asyncMap((snapshot) => _summariesFromDocs(snapshot.docs));
+  } catch (error, stack) {
+    return Stream.error(error, stack);
+  }
+}
+
+Future<List<AdminBookingSummary>> _summariesFromDocs(
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+) async {
+  final customerIds =
+      docs
+          .map((d) => d.data()['customerId'] as String?)
+          .whereType<String>()
+          .toSet();
+  final providerIds =
+      docs
+          .map((d) => d.data()['providerId'] as String?)
+          .whereType<String>()
+          .toSet();
 
   final customerNames = Map.fromEntries(
-    await Future.wait(customerIds.map((id) async => MapEntry(id, await fetchUserDisplayName(id) ?? '—'))),
+    await Future.wait(
+      customerIds.map(
+        (id) async => MapEntry(id, await fetchUserDisplayName(id) ?? '—'),
+      ),
+    ),
   );
   final providerNames = Map.fromEntries(
-    await Future.wait(providerIds.map((id) async {
-      final doc = await FirebaseFirestore.instance.collection('providers').doc(id).get();
-      return MapEntry(id, doc.data()?['displayName'] as String? ?? '—');
-    })),
+    await Future.wait(
+      providerIds.map((id) async {
+        final doc =
+            await FirebaseFirestore.instance
+                .collection('providers')
+                .doc(id)
+                .get();
+        return MapEntry(id, doc.data()?['displayName'] as String? ?? '—');
+      }),
+    ),
   );
 
-  return docs.map((doc) {
-    final data = doc.data();
-    final scheduledFor = data['scheduledFor'];
-    final customerId = data['customerId'] as String?;
-    final providerId = data['providerId'] as String?;
-    return AdminBookingSummary(
-      id: 'BK-${doc.id.length >= 6 ? doc.id.substring(0, 6).toUpperCase() : doc.id.toUpperCase()}',
-      serviceName: data['serviceName'] as String? ?? 'Service',
-      price: parsePrice(data['price']),
-      status: _displayStatus(data['status'] as String? ?? 'pending'),
-      city: data['city'] as String? ?? '—',
-      scheduleLabel: scheduledFor is Timestamp ? formatSchedule(scheduledFor.toDate()) : '—',
-      customerName: customerId != null ? (customerNames[customerId] ?? '—') : '—',
-      // Unclaimed bookings (providerId still null) have no provider yet —
-      // '—' is the honest state, not a placeholder name.
-      providerName: providerId != null ? (providerNames[providerId] ?? '—') : '—',
-    );
-  }).toList();
+  final summaries =
+      docs.map((doc) {
+        final data = doc.data();
+        final scheduledFor = data['scheduledFor'];
+        final customerId = data['customerId'] as String?;
+        final providerId = data['providerId'] as String?;
+        return AdminBookingSummary(
+          id:
+              'BK-${doc.id.length >= 6 ? doc.id.substring(0, 6).toUpperCase() : doc.id.toUpperCase()}',
+          serviceName: data['serviceName'] as String? ?? 'Service',
+          price: parsePrice(data['price']),
+          status: _displayStatus(data['status'] as String? ?? 'pending'),
+          city: data['city'] as String? ?? '—',
+          scheduleLabel:
+              scheduledFor is Timestamp
+                  ? formatSchedule(scheduledFor.toDate())
+                  : '—',
+          customerName:
+              customerId != null ? (customerNames[customerId] ?? '—') : '—',
+          // Unclaimed bookings (providerId still null) have no provider yet —
+          // '—' is the honest state, not a placeholder name.
+          providerName:
+              providerId != null ? (providerNames[providerId] ?? '—') : '—',
+        );
+      }).toList();
+  summaries.sort((a, b) => b.scheduleLabel.compareTo(a.scheduleLabel));
+  return summaries;
 }

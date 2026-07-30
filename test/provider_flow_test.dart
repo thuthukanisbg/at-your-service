@@ -10,6 +10,7 @@ import 'package:at_your_service/features/disputes/file_dispute_screen.dart';
 import 'package:at_your_service/features/provider/provider_earnings_screen.dart';
 import 'package:at_your_service/features/provider/provider_in_progress_screen.dart';
 import 'package:at_your_service/features/provider/provider_job_details_screen.dart';
+import 'package:at_your_service/features/provider/provider_jobs_service.dart';
 import 'package:at_your_service/features/provider/provider_navigate_screen.dart';
 import 'package:at_your_service/features/provider/provider_profile_screen.dart';
 import 'package:at_your_service/features/provider/provider_schedule_screen.dart';
@@ -65,9 +66,22 @@ class _StubAuthService extends AuthService {
   }) async {}
 }
 
+class _StubLifecycleService extends ProviderJobLifecycleService {
+  final statuses = <String>[];
+
+  @override
+  Future<void> updateStatus(String bookingId, String status) async {
+    statuses.add(status);
+  }
+}
+
 void main() {
+  late _StubLifecycleService lifecycle;
+
   setUp(() {
     AuthService.instance = _StubAuthService();
+    lifecycle = _StubLifecycleService();
+    ProviderJobLifecycleService.instance = lifecycle;
   });
 
   testWidgets('provider jobs list opens Job Details for the tapped job', (
@@ -209,6 +223,53 @@ void main() {
 
     expect(find.text('Job in Progress'), findsOneWidget);
   });
+
+  testWidgets(
+    'accepted real job travels, starts, and completes in backend order',
+    (tester) async {
+      await tester.pumpWidget(
+        _harness(
+          const ProviderJobDetailsScreen(
+            job: ProviderJob(
+              id: 'job-1',
+              customerId: 'customer-1',
+              title: 'Deep House Cleaning',
+              price: 600,
+              timeLabel: 'Today · 10:00 AM',
+              distanceLabel: 'Cape Town',
+              address: '23 Loop Street, Cape Town',
+              status: 'accepted',
+            ),
+            isAlreadyAccepted: true,
+          ),
+        ),
+      );
+      await tester.pump();
+
+      await tester.scrollUntilVisible(
+        find.text('Start Travel'),
+        300,
+        scrollable: find.byType(Scrollable),
+      );
+      await tester.tap(find.text('Start Travel'));
+      await tester.pumpAndSettle();
+
+      expect(lifecycle.statuses, ['en_route']);
+      expect(find.text('Navigate'), findsOneWidget);
+      expect(find.text('23 Loop Street, Cape Town'), findsOneWidget);
+
+      await tester.tap(find.text('Arrived · Start Job'));
+      await tester.pumpAndSettle();
+
+      expect(lifecycle.statuses, ['en_route', 'in_progress']);
+      expect(find.text('Job in Progress'), findsOneWidget);
+
+      await tester.tap(find.text('Complete Job'));
+      await tester.pumpAndSettle();
+
+      expect(lifecycle.statuses, ['en_route', 'in_progress', 'completed']);
+    },
+  );
 
   testWidgets(
     'In Progress task toggle updates status and Complete Job pops to root',

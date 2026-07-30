@@ -70,12 +70,9 @@ service cloud.firestore {
       allow update: if isSignedIn()
         && resource.data.customerId == uid()
         && request.resource.data.status == 'cancelled';
-      // Providers may update only work already assigned to them. New claims
-      // go through the transactional `claimJob` Cloud Function; direct client
-      // writes cannot bypass its active-provider and single-winner checks.
-      allow update: if isProvider()
-        && resource.data.get('providerId', null) == uid()
-        && request.resource.data.providerId == uid();
+      // Provider claims and lifecycle changes run through transactional
+      // callable functions. Direct client updates stay blocked so a provider
+      // cannot skip stages or alter booking/customer/payment fields.
       allow update: if isAdmin();
     }
 

@@ -10,6 +10,15 @@ import '../messaging/conversation_screen.dart';
 import 'customer_bookings_service.dart';
 import 'track_booking_screen.dart';
 
+String _displayBookingStatus(String status) => switch (status) {
+  'accepted' => 'Accepted',
+  'en_route' => 'On the way',
+  'in_progress' => 'In progress',
+  'completed' => 'Completed',
+  'cancelled' => 'Cancelled',
+  _ => 'Waiting',
+};
+
 /// Plain, functional bookings list — no design-handoff spec exists for this
 /// tab, so this follows the app's existing tokens/card visual pattern
 /// rather than a pixel-perfect match.
@@ -21,8 +30,8 @@ class CustomerBookingsScreen extends StatefulWidget {
 }
 
 class _CustomerBookingsScreenState extends State<CustomerBookingsScreen> {
-  late final Future<List<CustomerBookingSummary>> _bookingsFuture =
-      fetchMyBookings();
+  late final Stream<List<CustomerBookingSummary>> _bookingsStream =
+      watchMyBookings();
 
   @override
   Widget build(BuildContext context) {
@@ -42,8 +51,8 @@ class _CustomerBookingsScreenState extends State<CustomerBookingsScreen> {
               ),
             ),
             const SizedBox(height: 18),
-            FutureBuilder<List<CustomerBookingSummary>>(
-              future: _bookingsFuture,
+            StreamBuilder<List<CustomerBookingSummary>>(
+              stream: _bookingsStream,
               builder: (context, snapshot) {
                 if (!snapshot.hasData && !snapshot.hasError) {
                   return const Padding(
@@ -142,10 +151,9 @@ class _BookingCard extends StatelessWidget {
 
   Future<void> _openTracking(BuildContext context) async {
     final providerId = booking.providerId;
-    if (providerId == null) return;
     final customerId = FirebaseAuth.instance.currentUser?.uid;
     if (customerId == null) return;
-    final otherPartyName = await _providerName();
+    final otherPartyName = providerId == null ? null : await _providerName();
     if (!context.mounted) return;
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -164,10 +172,13 @@ class _BookingCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = context.tokens;
-    final isCompleted = booking.status == 'completed';
-    final statusColor = isCompleted ? AppColors.success : AppColors.accent;
+    final statusColor = switch (booking.status) {
+      'completed' => AppColors.success,
+      'accepted' || 'en_route' || 'in_progress' => AppColors.primary,
+      _ => AppColors.accent,
+    };
     return InkWell(
-      onTap: booking.providerId != null ? () => _openTracking(context) : null,
+      onTap: () => _openTracking(context),
       borderRadius: BorderRadius.circular(16),
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
@@ -228,7 +239,7 @@ class _BookingCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Text(
-                    isCompleted ? 'Completed' : booking.status,
+                    _displayBookingStatus(booking.status),
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w800,

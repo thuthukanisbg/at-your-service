@@ -55,9 +55,6 @@ class TrackBookingScreen extends StatelessWidget {
   final String? serviceName;
   final String? otherPartyName;
 
-  bool get _hasRealBooking =>
-      bookingId != null && customerId != null && providerId != null;
-
   /// True for any stored booking (assigned or not), as opposed to the
   /// parameterless preview/demo entry point. Used to swap the decorative
   /// live-map timeline for an honest two-step state: there is no real
@@ -70,18 +67,24 @@ class TrackBookingScreen extends StatelessWidget {
     );
   }
 
-  Future<void> _callProvider(BuildContext context) async {
-    if (!_hasRealBooking) {
+  Future<void> _callProvider(
+    BuildContext context,
+    String? effectiveProviderId,
+  ) async {
+    if (bookingId == null ||
+        customerId == null ||
+        effectiveProviderId == null) {
       _comingSoon(context, 'Calling');
       return;
     }
     // No providers in the live data have a phone number on file yet (it's
     // never collected during onboarding) — fetched lazily on tap rather
     // than eagerly for every screen load, since it's only needed here.
-    final doc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(providerId)
-        .get();
+    final doc =
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(effectiveProviderId)
+            .get();
     final phone = doc.data()?['phoneNumber'] as String?;
     if (!context.mounted) return;
     if (phone == null || phone.isEmpty) {
@@ -100,50 +103,99 @@ class TrackBookingScreen extends StatelessWidget {
     }
   }
 
-  void _reportProblem(BuildContext context) {
+  void _reportProblem(BuildContext context, String? effectiveProviderId) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => FileDisputeScreen(
-          bookingId: bookingId!,
-          customerId: customerId!,
-          providerId: providerId,
-          serviceName: serviceName ?? 'Service',
-        ),
+        builder:
+            (_) => FileDisputeScreen(
+              bookingId: bookingId!,
+              customerId: customerId!,
+              providerId: effectiveProviderId,
+              serviceName: serviceName ?? 'Service',
+            ),
       ),
     );
   }
 
-  void _openChat(BuildContext context) {
-    if (!_hasRealBooking) {
+  void _openChat(BuildContext context, String? effectiveProviderId) {
+    if (bookingId == null ||
+        customerId == null ||
+        effectiveProviderId == null) {
       _comingSoon(context, 'Chat');
       return;
     }
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => ConversationScreen(
-          bookingId: bookingId!,
-          customerId: customerId!,
-          providerId: providerId!,
-          serviceName: serviceName ?? 'Service',
-          otherPartyName: otherPartyName ?? 'Your provider',
-        ),
+        builder:
+            (_) => ConversationScreen(
+              bookingId: bookingId!,
+              customerId: customerId!,
+              providerId: effectiveProviderId,
+              serviceName: serviceName ?? 'Service',
+              otherPartyName: otherPartyName ?? 'Your provider',
+            ),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    if (!_isRealBooking) {
+      return _buildScreen(
+        context,
+        effectiveProviderId: providerId,
+        status: 'preview',
+      );
+    }
+    try {
+      return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+        stream:
+            FirebaseFirestore.instance
+                .collection('bookings')
+                .doc(bookingId)
+                .snapshots(),
+        builder: (context, snapshot) {
+          final data = snapshot.data?.data();
+          return _buildScreen(
+            context,
+            effectiveProviderId: data?['providerId'] as String? ?? providerId,
+            status: data?['status'] as String? ?? 'pending',
+          );
+        },
+      );
+    } catch (_) {
+      return _buildScreen(
+        context,
+        effectiveProviderId: providerId,
+        status: 'pending',
+      );
+    }
+  }
+
+  Widget _buildScreen(
+    BuildContext context, {
+    required String? effectiveProviderId,
+    required String status,
+  }) {
     final tokens = context.tokens;
-    final displayName = otherPartyName ?? 'Sipho M.';
-    final initials = displayName.trim().isEmpty
-        ? '?'
-        : displayName
-              .trim()
-              .split(RegExp(r'\s+'))
-              .map((p) => p[0])
-              .take(2)
-              .join()
-              .toUpperCase();
+    final hasAssignedBooking =
+        bookingId != null && customerId != null && effectiveProviderId != null;
+    final isEnRoute = status == 'en_route';
+    final isInProgress = status == 'in_progress';
+    final isCompleted = status == 'completed';
+    final displayName =
+        otherPartyName ??
+        (effectiveProviderId != null ? 'Assigned provider' : 'Sipho M.');
+    final initials =
+        displayName.trim().isEmpty
+            ? '?'
+            : displayName
+                .trim()
+                .split(RegExp(r'\s+'))
+                .map((p) => p[0])
+                .take(2)
+                .join()
+                .toUpperCase();
     return Scaffold(
       body: SafeArea(
         child: ListView(
@@ -222,7 +274,7 @@ class TrackBookingScreen extends StatelessWidget {
               ),
               const SizedBox(height: 14),
             ],
-            if (!_isRealBooking || providerId != null)
+            if (!_isRealBooking || effectiveProviderId != null)
               Container(
                 padding: const EdgeInsets.all(15),
                 margin: const EdgeInsets.only(bottom: 16),
@@ -264,7 +316,9 @@ class TrackBookingScreen extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            'Cleaning Specialist · ⭐ 4.9',
+                            _isRealBooking
+                                ? 'Service provider'
+                                : 'Cleaning Specialist · ⭐ 4.9',
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
@@ -278,13 +332,13 @@ class TrackBookingScreen extends StatelessWidget {
                     _CircleIconButton(
                       icon: LucideIcons.phone,
                       onTap: () {
-                        _callProvider(context);
+                        _callProvider(context, effectiveProviderId);
                       },
                     ),
                     const SizedBox(width: 12),
                     _CircleIconButton(
                       icon: LucideIcons.messageCircle,
-                      onTap: () => _openChat(context),
+                      onTap: () => _openChat(context, effectiveProviderId),
                     ),
                   ],
                 ),
@@ -307,47 +361,80 @@ class TrackBookingScreen extends StatelessWidget {
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Column(
-                children: _isRealBooking
-                    ? [
-                        // Real bookings only ever have two known statuses
-                        // ('pending'/'completed') and no live-location data —
-                        // showing the demo's granular "on the way" steps here
-                        // would be fabricated, so this is an honest 2-step
-                        // version instead.
-                        _TrackStepRow(
-                          step: const _TrackStep(
-                            'Booking confirmed',
-                            '',
-                            _StepState.done,
-                          ),
-                          isLast: false,
-                        ),
-                        _TrackStepRow(
-                          step: _TrackStep(
-                            providerId != null
-                                ? 'Provider assigned · $displayName'
-                                : 'Waiting for a provider',
-                            '',
-                            providerId != null
-                                ? _StepState.done
-                                : _StepState.idle,
-                          ),
-                          isLast: true,
-                        ),
-                      ]
-                    : [
-                        for (var i = 0; i < _trackSteps.length; i++)
+                children:
+                    _isRealBooking
+                        ? [
                           _TrackStepRow(
-                            step: _trackSteps[i],
-                            isLast: i == _trackSteps.length - 1,
+                            step: const _TrackStep(
+                              'Booking confirmed',
+                              '',
+                              _StepState.done,
+                            ),
+                            isLast: false,
                           ),
-                      ],
+                          _TrackStepRow(
+                            step: _TrackStep(
+                              effectiveProviderId != null
+                                  ? 'Provider assigned · $displayName'
+                                  : 'Waiting for a provider',
+                              '',
+                              effectiveProviderId != null
+                                  ? _StepState.done
+                                  : _StepState.idle,
+                            ),
+                            isLast: false,
+                          ),
+                          _TrackStepRow(
+                            step: _TrackStep(
+                              'Provider travelling to your site',
+                              '',
+                              isEnRoute
+                                  ? _StepState.active
+                                  : (isInProgress || isCompleted)
+                                  ? _StepState.done
+                                  : _StepState.idle,
+                            ),
+                            isLast: false,
+                          ),
+                          _TrackStepRow(
+                            step: _TrackStep(
+                              'Service in progress',
+                              '',
+                              isInProgress
+                                  ? _StepState.active
+                                  : isCompleted
+                                  ? _StepState.done
+                                  : _StepState.idle,
+                            ),
+                            isLast: false,
+                          ),
+                          _TrackStepRow(
+                            step: _TrackStep(
+                              'Service completed',
+                              '',
+                              isCompleted ? _StepState.done : _StepState.idle,
+                            ),
+                            isLast: true,
+                          ),
+                        ]
+                        : [
+                          for (var i = 0; i < _trackSteps.length; i++)
+                            _TrackStepRow(
+                              step: _trackSteps[i],
+                              isLast: i == _trackSteps.length - 1,
+                            ),
+                        ],
               ),
             ),
             InkWell(
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const RateReviewScreen()),
-              ),
+              onTap:
+                  !_isRealBooking || isCompleted
+                      ? () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const RateReviewScreen(),
+                        ),
+                      )
+                      : null,
               borderRadius: BorderRadius.circular(14),
               child: Container(
                 width: double.infinity,
@@ -359,20 +446,25 @@ class TrackBookingScreen extends StatelessWidget {
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Text(
-                  'Mark as complete & rate',
+                  _isRealBooking
+                      ? isCompleted
+                          ? 'Rate completed service'
+                          : 'Available after job completion'
+                      : 'Mark as complete & rate',
                   style: TextStyle(
                     fontSize: 14.5,
                     fontWeight: FontWeight.w800,
-                    color: tokens.tx,
+                    color:
+                        !_isRealBooking || isCompleted ? tokens.tx : tokens.mut,
                   ),
                 ),
               ),
             ),
-            if (_hasRealBooking)
+            if (hasAssignedBooking)
               Padding(
                 padding: const EdgeInsets.only(top: 12),
                 child: TextButton.icon(
-                  onPressed: () => _reportProblem(context),
+                  onPressed: () => _reportProblem(context, effectiveProviderId),
                   style: TextButton.styleFrom(
                     foregroundColor: AppColors.danger,
                   ),
@@ -428,15 +520,12 @@ class _TrackStepRow extends StatelessWidget {
       _StepState.active => AppColors.primary,
       _StepState.idle => tokens.chip,
     };
-    final Color iconColor = step.state == _StepState.idle
-        ? tokens.mut
-        : Colors.white;
-    final Color lineColor = step.state == _StepState.done
-        ? AppColors.success
-        : tokens.line;
-    final Color titleColor = step.state == _StepState.idle
-        ? tokens.mut
-        : tokens.tx;
+    final Color iconColor =
+        step.state == _StepState.idle ? tokens.mut : Colors.white;
+    final Color lineColor =
+        step.state == _StepState.done ? AppColors.success : tokens.line;
+    final Color titleColor =
+        step.state == _StepState.idle ? tokens.mut : tokens.tx;
 
     final dot = Container(
       width: 28,
@@ -453,9 +542,9 @@ class _TrackStepRow extends StatelessWidget {
             children: [
               step.state == _StepState.active
                   ? _PulsingOpacity(
-                      duration: const Duration(milliseconds: 1600),
-                      child: dot,
-                    )
+                    duration: const Duration(milliseconds: 1600),
+                    child: dot,
+                  )
                   : dot,
               if (!isLast)
                 Expanded(

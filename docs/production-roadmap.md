@@ -13,7 +13,12 @@ rules, and Android/iOS verification all pass.
 - Booking chat restricted to the assigned customer/provider pair after job
   assignment, with immutable messages and a 2,000-character limit.
 - Transactional provider job claiming in a second-generation Cloud Function.
-- Automatic in-app notification record when a provider accepts a booking.
+- Transactional, provider-only lifecycle transitions from accepted to
+  travelling, in progress, and completed.
+- Customer tracking, provider job history, Admin booking tables, and Admin
+  totals listen for live booking changes.
+- Automatic in-app notification records for provider assignment, travel,
+  work start, and completion.
 - Johannesburg backend region (`africa-south1`) with concurrency 80 and a
   20-instance cost guardrail. Google manages request distribution and
   autoscaling for this runtime.

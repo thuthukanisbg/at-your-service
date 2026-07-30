@@ -58,16 +58,20 @@ class _ReviewPayScreenState extends State<ReviewPayScreen> {
       } catch (_) {
         customerId = null;
       }
-      Navigator.of(context).push(
+      // The booking already exists at this point. Replace Review so Back
+      // cannot return to a disabled "Confirming…" button or create a
+      // duplicate booking.
+      Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (_) => TrackBookingScreen(
-            bookingId: bookingId,
-            customerId: customerId,
-            serviceName: widget.serviceName,
-            // providerId stays null — the booking is unassigned right after
-            // creation, so Chat correctly still shows "coming soon" until a
-            // provider claims it (see TrackBookingScreen's _hasRealBooking).
-          ),
+          builder:
+              (_) => TrackBookingScreen(
+                bookingId: bookingId,
+                customerId: customerId,
+                serviceName: widget.serviceName,
+                // providerId stays null — the booking is unassigned right after
+                // creation, so Chat correctly still shows "coming soon" until a
+                // provider claims it (see TrackBookingScreen's _hasRealBooking).
+              ),
         ),
       );
     } on BookingException catch (e) {

@@ -12,6 +12,7 @@ import '../../core/widgets/primary_cta_button.dart';
 import '../../models/provider_job.dart';
 import '../disputes/file_dispute_screen.dart';
 import '../messaging/conversation_screen.dart';
+import 'provider_in_progress_screen.dart';
 import 'provider_jobs_service.dart';
 import 'provider_mock_data.dart';
 import 'provider_navigate_screen.dart';
@@ -36,8 +37,33 @@ class ProviderJobDetailsScreen extends StatefulWidget {
 }
 
 class _ProviderJobDetailsScreenState extends State<ProviderJobDetailsScreen> {
-  bool _claiming = false;
+  bool _working = false;
+  late bool _accepted;
+  late String _status;
   ProviderJob get job => widget.job;
+
+  @override
+  void initState() {
+    super.initState();
+    _accepted = widget.isAlreadyAccepted || job.status != 'pending';
+    _status =
+        widget.isAlreadyAccepted && job.status == 'pending'
+            ? 'accepted'
+            : job.status;
+  }
+
+  @override
+  void didUpdateWidget(covariant ProviderJobDetailsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.job != widget.job ||
+        oldWidget.isAlreadyAccepted != widget.isAlreadyAccepted) {
+      _accepted = widget.isAlreadyAccepted || job.status != 'pending';
+      _status =
+          widget.isAlreadyAccepted && job.status == 'pending'
+              ? 'accepted'
+              : job.status;
+    }
+  }
 
   // Resolved once and reused by both the "Customer" info row and the
   // "Message Customer" button, rather than fetching the same doc twice.
@@ -47,33 +73,98 @@ class _ProviderJobDetailsScreenState extends State<ProviderJobDetailsScreen> {
           : Future.value(null);
 
   Future<void> _acceptJob() async {
-    if (widget.isAlreadyAccepted || job.id == null) {
+    if (job.id == null) {
       Navigator.of(
         context,
       ).push(MaterialPageRoute(builder: (_) => const ProviderNavigateScreen()));
       return;
     }
-    setState(() => _claiming = true);
+    setState(() => _working = true);
     try {
       await claimJob(job.id!);
       if (!mounted) return;
-      Navigator.of(
-        context,
-      ).push(MaterialPageRoute(builder: (_) => const ProviderNavigateScreen()));
+      setState(() {
+        _accepted = true;
+        _status = 'accepted';
+        _working = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Job accepted. You can message the customer before travelling.',
+          ),
+        ),
+      );
     } on ClaimException catch (e) {
       if (!mounted) return;
-      setState(() => _claiming = false);
+      setState(() => _working = false);
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(e.message)));
     } catch (_) {
       if (!mounted) return;
-      setState(() => _claiming = false);
+      setState(() => _working = false);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("Couldn't accept this job — please try again."),
         ),
       );
+    }
+  }
+
+  Future<void> _startTravel() async {
+    final bookingId = job.id;
+    if (bookingId == null) {
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const ProviderNavigateScreen()));
+      return;
+    }
+    if (_status == 'in_progress') {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder:
+              (_) => ProviderInProgressScreen(
+                job: job.copyWith(status: 'in_progress'),
+              ),
+        ),
+      );
+      return;
+    }
+    if (_status == 'en_route') {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder:
+              (_) =>
+                  ProviderNavigateScreen(job: job.copyWith(status: 'en_route')),
+        ),
+      );
+      return;
+    }
+    setState(() => _working = true);
+    try {
+      await ProviderJobLifecycleService.instance.updateStatus(
+        bookingId,
+        'en_route',
+      );
+      if (!mounted) return;
+      setState(() {
+        _status = 'en_route';
+        _working = false;
+      });
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder:
+              (_) =>
+                  ProviderNavigateScreen(job: job.copyWith(status: 'en_route')),
+        ),
+      );
+    } on JobStatusException catch (error) {
+      if (!mounted) return;
+      setState(() => _working = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
     }
   }
 
@@ -318,7 +409,9 @@ class _ProviderJobDetailsScreenState extends State<ProviderJobDetailsScreen> {
                     ),
                   ),
                   Text(
-                    providerJobCustomerNote,
+                    job.notes?.trim().isNotEmpty == true
+                        ? job.notes!
+                        : providerJobCustomerNote,
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
@@ -329,9 +422,7 @@ class _ProviderJobDetailsScreenState extends State<ProviderJobDetailsScreen> {
                 ],
               ),
             ),
-            if (widget.isAlreadyAccepted &&
-                job.id != null &&
-                job.customerId != null)
+            if (_accepted && job.id != null && job.customerId != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: SizedBox(
@@ -357,9 +448,7 @@ class _ProviderJobDetailsScreenState extends State<ProviderJobDetailsScreen> {
                   ),
                 ),
               ),
-            if (widget.isAlreadyAccepted &&
-                job.id != null &&
-                job.customerId != null)
+            if (_accepted && job.id != null && job.customerId != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: SizedBox(
@@ -382,14 +471,21 @@ class _ProviderJobDetailsScreenState extends State<ProviderJobDetailsScreen> {
                 ),
               ),
             PrimaryCtaButton(
-              label:
-                  widget.isAlreadyAccepted
-                      ? 'Start Navigation'
-                      : (_claiming ? 'Accepting…' : 'Accept Job'),
+              label: switch ((_accepted, _status, _working)) {
+                (_, _, true) => 'Updating…',
+                (false, _, false) => 'Accept Job',
+                (true, 'en_route', false) => 'Continue Travel',
+                (true, 'in_progress', false) => 'Continue Job',
+                (true, 'completed', false) => 'Job Completed',
+                _ => 'Start Travel',
+              },
               style: AppTheme.amberAction,
               shadowColor: AppColors.accent,
               shadowAlpha: 0.6,
-              onPressed: _claiming ? null : _acceptJob,
+              onPressed:
+                  _working || _status == 'completed'
+                      ? null
+                      : (_accepted ? _startTravel : _acceptJob),
             ),
           ],
         ),

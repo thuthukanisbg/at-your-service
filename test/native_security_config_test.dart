@@ -50,12 +50,15 @@ void main() {
     'job claims and chat identities are protected by trusted boundaries',
     () {
       final rules = File('firestore.rules').readAsStringSync();
+      final functions = File('functions/src/index.ts').readAsStringSync();
 
       expect(
         rules,
-        contains(
-          "resource.data.get('providerId', null) == uid()\n"
-          "        && request.resource.data.providerId == uid()",
+        isNot(
+          contains(
+            "resource.data.get('providerId', null) == uid()\n"
+            "        && request.resource.data.providerId == uid()",
+          ),
         ),
       );
       expect(
@@ -63,6 +66,8 @@ void main() {
         contains('request.resource.data.providerId == booking().providerId'),
       );
       expect(rules, contains('request.resource.data.text.size() <= 2000'));
+      expect(functions, contains('export const updateJobStatus'));
+      expect(functions, contains('status: "accepted"'));
     },
   );
 

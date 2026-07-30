@@ -19,16 +19,25 @@ class ProviderJobsScreen extends StatefulWidget {
 enum _JobTab { available, accepted }
 
 class _ProviderJobsScreenState extends State<ProviderJobsScreen> {
-  late final Future<List<ProviderJob>> _availableFuture = fetchAvailableJobs();
-  late final Future<List<ProviderJob>> _acceptedFuture = fetchAssignedJobs();
+  late Future<List<ProviderJob>> _availableFuture = fetchAvailableJobs();
+  late Future<List<ProviderJob>> _acceptedFuture = fetchAssignedJobs();
   _JobTab _tab = _JobTab.available;
 
-  void _openJob(BuildContext context, ProviderJob job) {
-    Navigator.of(context).push(
+  Future<void> _openJob(BuildContext context, ProviderJob job) async {
+    await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => ProviderJobDetailsScreen(job: job, isAlreadyAccepted: _tab == _JobTab.accepted),
+        builder:
+            (_) => ProviderJobDetailsScreen(
+              job: job,
+              isAlreadyAccepted: _tab == _JobTab.accepted,
+            ),
       ),
     );
+    if (!mounted) return;
+    setState(() {
+      _availableFuture = fetchAvailableJobs();
+      _acceptedFuture = fetchAssignedJobs();
+    });
   }
 
   @override
@@ -45,11 +54,19 @@ class _ProviderJobsScreenState extends State<ProviderJobsScreen> {
                 Expanded(
                   child: Text(
                     'My Jobs',
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.5, color: tokens.tx),
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.5,
+                      color: tokens.tx,
+                    ),
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 11,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0x1F2ECC71), // rgba(46,204,113,.12)
                     borderRadius: BorderRadius.circular(999),
@@ -60,10 +77,22 @@ class _ProviderJobsScreenState extends State<ProviderJobsScreen> {
                       SizedBox(
                         width: 7,
                         height: 7,
-                        child: DecoratedBox(decoration: BoxDecoration(color: AppColors.success, shape: BoxShape.circle)),
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: AppColors.success,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
                       ),
                       SizedBox(width: 6),
-                      Text('Online', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.success)),
+                      Text(
+                        'Online',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.success,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -88,15 +117,24 @@ class _ProviderJobsScreenState extends State<ProviderJobsScreen> {
                         height: 36,
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
-                          color: _tab == _JobTab.available ? AppColors.primary : null,
+                          color:
+                              _tab == _JobTab.available
+                                  ? AppColors.primary
+                                  : null,
                           borderRadius: BorderRadius.circular(9),
                         ),
                         child: Text(
                           'Available',
                           style: TextStyle(
                             fontSize: 13,
-                            fontWeight: _tab == _JobTab.available ? FontWeight.w800 : FontWeight.w700,
-                            color: _tab == _JobTab.available ? Colors.white : tokens.mut,
+                            fontWeight:
+                                _tab == _JobTab.available
+                                    ? FontWeight.w800
+                                    : FontWeight.w700,
+                            color:
+                                _tab == _JobTab.available
+                                    ? Colors.white
+                                    : tokens.mut,
                           ),
                         ),
                       ),
@@ -111,15 +149,24 @@ class _ProviderJobsScreenState extends State<ProviderJobsScreen> {
                         height: 36,
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
-                          color: _tab == _JobTab.accepted ? AppColors.primary : null,
+                          color:
+                              _tab == _JobTab.accepted
+                                  ? AppColors.primary
+                                  : null,
                           borderRadius: BorderRadius.circular(9),
                         ),
                         child: Text(
-                          'Accepted',
+                          'Assigned',
                           style: TextStyle(
                             fontSize: 13,
-                            fontWeight: _tab == _JobTab.accepted ? FontWeight.w800 : FontWeight.w700,
-                            color: _tab == _JobTab.accepted ? Colors.white : tokens.mut,
+                            fontWeight:
+                                _tab == _JobTab.accepted
+                                    ? FontWeight.w800
+                                    : FontWeight.w700,
+                            color:
+                                _tab == _JobTab.accepted
+                                    ? Colors.white
+                                    : tokens.mut,
                           ),
                         ),
                       ),
@@ -129,12 +176,17 @@ class _ProviderJobsScreenState extends State<ProviderJobsScreen> {
               ),
             ),
             FutureBuilder<List<ProviderJob>>(
-              future: _tab == _JobTab.available ? _availableFuture : _acceptedFuture,
+              future:
+                  _tab == _JobTab.available
+                      ? _availableFuture
+                      : _acceptedFuture,
               builder: (context, snapshot) {
                 if (!snapshot.hasData && !snapshot.hasError) {
                   return const Padding(
                     padding: EdgeInsets.symmetric(vertical: 32),
-                    child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
+                    child: Center(
+                      child: CircularProgressIndicator(strokeWidth: 2.4),
+                    ),
                   );
                 }
                 // Error (e.g. no live Firebase app) falls back to mock jobs;
@@ -144,7 +196,11 @@ class _ProviderJobsScreenState extends State<ProviderJobsScreen> {
                   return Column(
                     children: [
                       for (final job in providerJobs)
-                        _JobCard(job: job, isAccepted: _tab == _JobTab.accepted, onTap: () => _openJob(context, job)),
+                        _JobCard(
+                          job: job,
+                          isAccepted: _tab == _JobTab.accepted,
+                          onTap: () => _openJob(context, job),
+                        ),
                     ],
                   );
                 }
@@ -154,8 +210,14 @@ class _ProviderJobsScreenState extends State<ProviderJobsScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 32),
                     child: Center(
                       child: Text(
-                        _tab == _JobTab.available ? 'No open jobs right now.' : 'No jobs assigned yet.',
-                        style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: tokens.mut),
+                        _tab == _JobTab.available
+                            ? 'No open jobs right now.'
+                            : 'No jobs assigned yet.',
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
+                          color: tokens.mut,
+                        ),
                       ),
                     ),
                   );
@@ -163,7 +225,11 @@ class _ProviderJobsScreenState extends State<ProviderJobsScreen> {
                 return Column(
                   children: [
                     for (final job in jobs)
-                      _JobCard(job: job, isAccepted: _tab == _JobTab.accepted, onTap: () => _openJob(context, job)),
+                      _JobCard(
+                        job: job,
+                        isAccepted: _tab == _JobTab.accepted,
+                        onTap: () => _openJob(context, job),
+                      ),
                   ],
                 );
               },
@@ -176,7 +242,11 @@ class _ProviderJobsScreenState extends State<ProviderJobsScreen> {
 }
 
 class _JobCard extends StatelessWidget {
-  const _JobCard({required this.job, required this.onTap, this.isAccepted = false});
+  const _JobCard({
+    required this.job,
+    required this.onTap,
+    this.isAccepted = false,
+  });
 
   final ProviderJob job;
   final VoidCallback onTap;
@@ -185,6 +255,21 @@ class _JobCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = context.tokens;
+    final statusLabel = switch (job.status) {
+      'accepted' => 'Accepted',
+      'en_route' => 'Travelling',
+      'in_progress' => 'In progress',
+      'completed' => 'Completed',
+      _ => 'Assigned',
+    };
+    final statusColor =
+        job.status == 'completed' ? AppColors.success : AppColors.primary;
+    final actionLabel = switch (job.status) {
+      'en_route' => 'Continue Travel',
+      'in_progress' => 'Continue Job',
+      'completed' => 'View Completed Job',
+      _ => 'View Job',
+    };
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(15),
@@ -205,10 +290,21 @@ class _JobCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     job.title,
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: tokens.tx),
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: tokens.tx,
+                    ),
                   ),
                 ),
-                Text(formatRand(job.price), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.primary)),
+                Text(
+                  formatRand(job.price),
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.primary,
+                  ),
+                ),
               ],
             ),
             Padding(
@@ -222,16 +318,49 @@ class _JobCard extends StatelessWidget {
                       job.timeLabel,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: tokens.mut),
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: tokens.mut,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 14),
                   Icon(LucideIcons.mapPin, size: 13, color: tokens.mut),
                   const SizedBox(width: 5),
-                  Text(job.distanceLabel, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: tokens.mut)),
+                  Text(
+                    job.distanceLabel,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: tokens.mut,
+                    ),
+                  ),
                 ],
               ),
             ),
+            if (isAccepted)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    statusLabel,
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w800,
+                      color: statusColor,
+                    ),
+                  ),
+                ),
+              ),
             SizedBox(
               width: double.infinity,
               height: 42,
@@ -241,10 +370,15 @@ class _JobCard extends StatelessWidget {
                   backgroundColor: AppColors.accent,
                   foregroundColor: AppColors.accentOnAccent,
                   elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
-                  textStyle: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                  textStyle: const TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
-                child: Text(isAccepted ? 'View Job' : 'Accept Job'),
+                child: Text(isAccepted ? actionLabel : 'Accept Job'),
               ),
             ),
           ],

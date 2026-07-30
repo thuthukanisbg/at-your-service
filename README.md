@@ -31,18 +31,21 @@ brand typography does not depend on a live Google Fonts request.
 - Customer discovery, search, booking, real upcoming dates, service-address
   capture, booking confirmation, tracking states, reviews, messages,
   notifications, profile, and disputes.
-- Provider job acceptance, navigation handoff, job progress, schedule,
-  earnings, profile, verification, a dedicated message inbox, and disputes.
-- Mobile admin overview, bookings, providers, review workflow, and sign-out.
+- Provider job acceptance, customer chat, travel, job start/completion,
+  schedule, earnings, profile, verification, a dedicated message inbox, and
+  disputes.
+- Mobile admin overview, live booking monitoring with customer/provider names
+  and lifecycle states, providers, review workflow, and sign-out.
 - Responsive desktop admin shell at 900 px and wider.
 - Desktop admin account provisioning for customers/providers, including
   password-setup emails, plus service-category creation and full-width
   responsive directory tables.
 - Real-time booking chat with participant-only rules, customer/provider
   inboxes, read receipts, and unread navigation badges.
-- A transactional Johannesburg Cloud Function for single-winner job claims,
-  plus a minimal REST health endpoint. Second-generation Cloud Functions
-  provide managed request distribution and autoscaling.
+- Transactional Johannesburg Cloud Functions for single-winner job claims and
+  ordered job-state transitions, plus a minimal REST health endpoint.
+  Second-generation Cloud Functions provide managed request distribution and
+  autoscaling.
 
 ## Running locally
 
@@ -88,9 +91,8 @@ The complete prerequisites and acceptance criteria are tracked in
 - Provider before/after photo upload remains a next milestone.
 - The moving-provider map is demo-only; real bookings show honest waiting and
   assigned states because no live-location backend exists.
-- A provider-assigned notification is created by the trusted claim backend,
-  but push delivery and the remaining booking-event triggers are not
-  implemented.
+- In-app notification records are created for provider assignment, travel,
+  work start, and completion, but push delivery is not implemented.
 
 Before store submission:
 
@@ -109,10 +111,12 @@ Before store submission:
 ## Backend and scaling
 
 The mobile/web clients use Firebase SDKs for ordinary authenticated data and
-Firestore listeners for real-time chat. Sensitive job claiming uses the
-`claimJob` callable function in `africa-south1`. The same second-generation
-runtime supplies managed load distribution and horizontal autoscaling, so
-there is no standalone load-balancer server to operate at this stage.
+Firestore listeners for real-time chat and booking monitoring. Sensitive job
+claiming and ordered lifecycle changes use the `claimJob` and
+`updateJobStatus` callable functions in `africa-south1`. The same
+second-generation runtime supplies managed load distribution and horizontal
+autoscaling, so there is no standalone load-balancer server to operate at this
+stage.
 
 Backend checks:
 

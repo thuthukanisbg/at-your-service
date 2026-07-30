@@ -233,6 +233,30 @@ void main() {
   });
 
   testWidgets(
+    'a real pending booking cannot be rated before provider completion',
+    (tester) async {
+      await tester.pumpWidget(
+        _harness(
+          const TrackBookingScreen(
+            bookingId: 'booking-1',
+            customerId: 'customer-1',
+            serviceName: 'Deep House Cleaning',
+          ),
+        ),
+      );
+      await tester.pump();
+
+      await tester.scrollUntilVisible(
+        find.text('Available after job completion'),
+        300,
+        scrollable: find.byType(Scrollable),
+      );
+      expect(find.text('Available after job completion'), findsOneWidget);
+      expect(find.text('Mark as complete & rate'), findsNothing);
+    },
+  );
+
+  testWidgets(
     'Track Booking Report a problem opens the dispute filing screen on a real booking',
     (tester) async {
       // Only real bookings (bookingId/customerId/providerId all set) show the

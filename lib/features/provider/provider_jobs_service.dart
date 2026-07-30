@@ -19,7 +19,9 @@ ProviderJob _toProviderJob(String id, Map<String, dynamic> data) {
     // Real bookings have no distance/geo data at all — reusing this slot
     // for the booking's city, the closest real "where" info available.
     distanceLabel: data['city'] as String? ?? '—',
+    status: data['status'] as String? ?? 'pending',
     address: data['address'] as String?,
+    notes: data['notes'] as String?,
   );
 }
 
@@ -69,14 +71,46 @@ Future<void> claimJob(String bookingId) async {
   }
 }
 
+/// Thrown by provider lifecycle actions with text safe for the UI.
+class JobStatusException implements Exception {
+  const JobStatusException(this.message);
+  final String message;
+}
+
+/// Injectable wrapper for the trusted lifecycle callable. Widget tests replace
+/// [instance] without needing a live Firebase app.
+class ProviderJobLifecycleService {
+  static ProviderJobLifecycleService instance = ProviderJobLifecycleService();
+
+  Future<void> updateStatus(String bookingId, String status) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      throw const JobStatusException(
+        'You need to be signed in to update this job.',
+      );
+    }
+    try {
+      await FirebaseFunctions.instanceFor(region: 'africa-south1')
+          .httpsCallable('updateJobStatus')
+          .call<void>({'bookingId': bookingId, 'status': status});
+    } on FirebaseFunctionsException catch (error) {
+      throw JobStatusException(
+        error.message ?? 'The job status could not be updated. Please retry.',
+      );
+    } catch (_) {
+      throw const JobStatusException(
+        'The job status could not be updated. Please retry.',
+      );
+    }
+  }
+}
+
 /// Fetches unclaimed, still-open bookings any provider may browse and
 /// claim — the "Available" tab.
 ///
-/// Confirmed against live data: every 'pending' booking has `providerId`
-/// null and every 'completed' one has it set, so `providerId == null &&
-/// status == 'pending'` is the real "available job" definition (matches
-/// the read rule added for this). Requires being signed in as a provider —
-/// the deployed rule only grants this read to `isProvider()`.
+/// `providerId == null && status == 'pending'` is the available-job
+/// definition. Claimed bookings advance through accepted, en_route,
+/// in_progress, and completed.
 Future<List<ProviderJob>> fetchAvailableJobs() async {
   final snapshot =
       await FirebaseFirestore.instance
