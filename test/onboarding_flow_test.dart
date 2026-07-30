@@ -5,6 +5,7 @@ import 'package:at_your_service/core/services/auth_service.dart';
 import 'package:at_your_service/core/theme/app_theme.dart';
 import 'package:at_your_service/core/widgets/mobile_frame.dart';
 import 'package:at_your_service/features/admin/admin_login_screen.dart';
+import 'package:at_your_service/features/customer/customer_shell.dart';
 import 'package:at_your_service/features/onboarding/auth_screen.dart';
 import 'package:at_your_service/features/onboarding/onboarding_screen.dart';
 import 'package:at_your_service/features/onboarding/splash_screen.dart';
@@ -39,6 +40,9 @@ class _StubAuthService extends AuthService {
   }) async {}
 
   @override
+  Future<void> signInWithGoogle() async {}
+
+  @override
   Future<UserRole?> fetchSavedRole() async => null;
 
   @override
@@ -48,6 +52,11 @@ class _StubAuthService extends AuthService {
 class _AdminAuthService extends _StubAuthService {
   @override
   Future<UserRole?> fetchSavedRole() async => UserRole.admin;
+}
+
+class _GoogleCustomerAuthService extends _StubAuthService {
+  @override
+  Future<UserRole?> fetchSavedRole() async => UserRole.customer;
 }
 
 void main() {
@@ -184,18 +193,16 @@ void main() {
     expect(find.byType(RoleSelectScreen), findsNothing);
   });
 
-  testWidgets('Auth Google button is coming-soon, not an auth bypass', (
+  testWidgets('Auth Google button signs a customer in through AuthService', (
     tester,
   ) async {
+    AuthService.instance = _GoogleCustomerAuthService();
     await tester.pumpWidget(_harness(const AuthScreen()));
 
     await tester.tap(find.text('Google'));
-    await tester.pump();
+    await tester.pumpAndSettle();
 
-    expect(
-      find.text('Google sign-in arrives in the next milestone.'),
-      findsOneWidget,
-    );
+    expect(find.byType(CustomerShell), findsOneWidget);
     expect(find.byType(RoleSelectScreen), findsNothing);
   });
 

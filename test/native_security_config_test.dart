@@ -32,6 +32,7 @@ void main() {
       rules,
       contains("request.resource.data.role in ['customer', 'provider']"),
     );
+    expect(rules, contains("request.resource.data.role == 'customer'"));
     expect(
       rules,
       contains(
@@ -39,6 +40,26 @@ void main() {
       ),
     );
   });
+
+  test(
+    'job claims and chat identities are protected by trusted boundaries',
+    () {
+      final rules = File('firestore.rules').readAsStringSync();
+
+      expect(
+        rules,
+        contains(
+          "resource.data.get('providerId', null) == uid()\n"
+          "        && request.resource.data.providerId == uid()",
+        ),
+      );
+      expect(
+        rules,
+        contains('request.resource.data.providerId == booking().providerId'),
+      );
+      expect(rules, contains('request.resource.data.text.size() <= 2000'));
+    },
+  );
 
   test('admin-managed profiles are limited to customer and provider roles', () {
     final rules = File('firestore.rules').readAsStringSync();

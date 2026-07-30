@@ -9,8 +9,8 @@ import '../../core/utils/schedule_format.dart';
 import '../messaging/conversation_screen.dart';
 import '../messaging/messaging_service.dart';
 
-class CustomerMessagesScreen extends StatelessWidget {
-  const CustomerMessagesScreen({super.key});
+class ProviderMessagesScreen extends StatelessWidget {
+  const ProviderMessagesScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +36,7 @@ class CustomerMessagesScreen extends StatelessWidget {
             ),
             Expanded(
               child: StreamBuilder<List<ConversationSummary>>(
-                stream: watchMyConversationsAsCustomer(),
+                stream: watchMyConversationsAsProvider(),
                 builder: (context, snapshot) {
                   if (!snapshot.hasData && !snapshot.hasError) {
                     return const Center(
@@ -72,7 +72,7 @@ class CustomerMessagesScreen extends StatelessWidget {
                     padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
                     itemCount: conversations.length,
                     itemBuilder:
-                        (context, index) => _ConversationTile(
+                        (context, index) => _ProviderConversationTile(
                           conversation: conversations[index],
                         ),
                   );
@@ -86,18 +86,18 @@ class CustomerMessagesScreen extends StatelessWidget {
   }
 }
 
-class _ConversationTile extends StatelessWidget {
-  const _ConversationTile({required this.conversation});
+class _ProviderConversationTile extends StatelessWidget {
+  const _ProviderConversationTile({required this.conversation});
 
   final ConversationSummary conversation;
 
-  Future<String> _providerName() async {
+  Future<String> _customerName() async {
     final doc =
         await FirebaseFirestore.instance
-            .collection('providers')
-            .doc(conversation.providerId)
+            .collection('users')
+            .doc(conversation.customerId)
             .get();
-    return doc.data()?['displayName'] as String? ?? 'Your provider';
+    return doc.data()?['name'] as String? ?? 'Customer';
   }
 
   @override
@@ -106,9 +106,9 @@ class _ConversationTile extends StatelessWidget {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     final unread = uid != null && conversation.isUnreadFor(uid);
     return FutureBuilder<String>(
-      future: _providerName(),
+      future: _customerName(),
       builder: (context, snapshot) {
-        final providerName = snapshot.data ?? conversation.serviceName;
+        final customerName = snapshot.data ?? 'Customer';
         return InkWell(
           borderRadius: BorderRadius.circular(14),
           onTap:
@@ -120,7 +120,7 @@ class _ConversationTile extends StatelessWidget {
                         customerId: conversation.customerId,
                         providerId: conversation.providerId,
                         serviceName: conversation.serviceName,
-                        otherPartyName: providerName,
+                        otherPartyName: customerName,
                       ),
                 ),
               ),
@@ -138,14 +138,14 @@ class _ConversationTile extends StatelessWidget {
                   width: 42,
                   height: 42,
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.14),
+                    color: AppColors.accent.withValues(alpha: 0.14),
                     shape: BoxShape.circle,
                   ),
                   alignment: Alignment.center,
                   child: const Icon(
                     LucideIcons.user,
                     size: 19,
-                    color: AppColors.primary,
+                    color: AppColors.accent,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -154,7 +154,7 @@ class _ConversationTile extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        providerName,
+                        customerName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(

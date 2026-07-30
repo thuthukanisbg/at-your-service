@@ -26,18 +26,23 @@ brand typography does not depend on a live Google Fonts request.
 
 ## Implemented flows
 
-- Onboarding, email/password authentication, phone verification UI, and role
-  selection.
+- Onboarding, email/password authentication, phone verification, Google
+  customer authentication, and role selection.
 - Customer discovery, search, booking, real upcoming dates, service-address
   capture, booking confirmation, tracking states, reviews, messages,
   notifications, profile, and disputes.
 - Provider job acceptance, navigation handoff, job progress, schedule,
-  earnings, profile, verification, messages, and disputes.
+  earnings, profile, verification, a dedicated message inbox, and disputes.
 - Mobile admin overview, bookings, providers, review workflow, and sign-out.
 - Responsive desktop admin shell at 900 px and wider.
 - Desktop admin account provisioning for customers/providers, including
   password-setup emails, plus service-category creation and full-width
   responsive directory tables.
+- Real-time booking chat with participant-only rules, customer/provider
+  inboxes, read receipts, and unread navigation badges.
+- A transactional Johannesburg Cloud Function for single-winner job claims,
+  plus a minimal REST health endpoint. Second-generation Cloud Functions
+  provide managed request distribution and autoscaling.
 
 ## Running locally
 
@@ -72,19 +77,20 @@ before Flutter renders.
 
 ## Production-readiness boundaries
 
-These items are deliberately not presented as working product functionality:
+These items are deliberately not presented as working product functionality.
+The complete prerequisites and acceptance criteria are tracked in
+[`docs/production-roadmap.md`](docs/production-roadmap.md).
 
 - Online payment processing is not integrated. The app now says **Confirm
   Booking** and explicitly tells the customer that no charge will occur.
 - Desktop admin payments, discounts, and unaggregated chart sections remain
   clearly labelled design-preview data until backing collections exist.
-- Google sign-in remains a next milestone.
 - Provider before/after photo upload remains a next milestone.
 - The moving-provider map is demo-only; real bookings show honest waiting and
   assigned states because no live-location backend exists.
-- Notification records can be displayed but automatic booking-event triggers
-  are not implemented.
-- Unread-message badges are not shown because read receipts are not stored.
+- A provider-assigned notification is created by the trusted claim backend,
+  but push delivery and the remaining booking-event triggers are not
+  implemented.
 
 Before store submission:
 
@@ -99,6 +105,23 @@ Before store submission:
    provisioning profile.
 4. Add a real payment provider before restoring payment-method selection or
    payment language.
+
+## Backend and scaling
+
+The mobile/web clients use Firebase SDKs for ordinary authenticated data and
+Firestore listeners for real-time chat. Sensitive job claiming uses the
+`claimJob` callable function in `africa-south1`. The same second-generation
+runtime supplies managed load distribution and horizontal autoscaling, so
+there is no standalone load-balancer server to operate at this stage.
+
+Backend checks:
+
+```sh
+cd functions
+npm install
+npm test
+npm audit --omit=dev
+```
 
 The editable product-flow reference is available in the project’s Figma file:
 <https://www.figma.com/design/cmWvK32jt9vU6JMwqa7ex2>.

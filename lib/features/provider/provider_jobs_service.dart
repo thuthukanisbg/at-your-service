@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../core/utils/schedule_format.dart';
@@ -6,7 +7,8 @@ import '../../models/provider_job.dart';
 
 ProviderJob _toProviderJob(String id, Map<String, dynamic> data) {
   final scheduledFor = data['scheduledFor'];
-  final timeLabel = scheduledFor is Timestamp ? formatSchedule(scheduledFor.toDate()) : '—';
+  final timeLabel =
+      scheduledFor is Timestamp ? formatSchedule(scheduledFor.toDate()) : '—';
 
   return ProviderJob(
     id: id,
@@ -27,12 +29,15 @@ Future<List<ProviderJob>> fetchAssignedJobs() async {
   final uid = FirebaseAuth.instance.currentUser?.uid;
   if (uid == null) return [];
 
-  final snapshot = await FirebaseFirestore.instance
-      .collection('bookings')
-      .where('providerId', isEqualTo: uid)
-      .get();
+  final snapshot =
+      await FirebaseFirestore.instance
+          .collection('bookings')
+          .where('providerId', isEqualTo: uid)
+          .get();
 
-  return snapshot.docs.map((doc) => _toProviderJob(doc.id, doc.data())).toList();
+  return snapshot.docs
+      .map((doc) => _toProviderJob(doc.id, doc.data()))
+      .toList();
 }
 
 /// Thrown by [claimJob] with a message safe to show the user directly.
@@ -41,24 +46,26 @@ class ClaimException implements Exception {
   final String message;
 }
 
-/// Claims an unassigned booking for the signed-in provider. Matches the
-/// deployed rule exactly: allowed only while `providerId` is still null —
-/// if another provider claimed it first, this update is rejected and
-/// surfaces as a permission error, which is the honest outcome (this is a
-/// plain rule check, not a transaction, so two providers can still race
-/// each other; whoever's write lands first wins, the second fails here).
+/// Claims an unassigned booking through the trusted Johannesburg backend.
+/// The Cloud Function uses a Firestore transaction, so two providers can
+/// never both receive a successful claim for the same job.
 Future<void> claimJob(String bookingId) async {
   final uid = FirebaseAuth.instance.currentUser?.uid;
   if (uid == null) {
     throw const ClaimException('You need to be signed in to accept a job.');
   }
   try {
-    await FirebaseFirestore.instance.collection('bookings').doc(bookingId).update({
-      'providerId': uid,
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+    await FirebaseFunctions.instanceFor(
+      region: 'africa-south1',
+    ).httpsCallable('claimJob').call<void>({'bookingId': bookingId});
+  } on FirebaseFunctionsException catch (error) {
+    throw ClaimException(
+      error.message ?? 'This job could not be accepted. Please try again.',
+    );
   } catch (_) {
-    throw const ClaimException('This job was just claimed by another provider.');
+    throw const ClaimException(
+      'This job could not be accepted. Please try again.',
+    );
   }
 }
 
@@ -71,11 +78,14 @@ Future<void> claimJob(String bookingId) async {
 /// the read rule added for this). Requires being signed in as a provider —
 /// the deployed rule only grants this read to `isProvider()`.
 Future<List<ProviderJob>> fetchAvailableJobs() async {
-  final snapshot = await FirebaseFirestore.instance
-      .collection('bookings')
-      .where('providerId', isEqualTo: null)
-      .where('status', isEqualTo: 'pending')
-      .get();
+  final snapshot =
+      await FirebaseFirestore.instance
+          .collection('bookings')
+          .where('providerId', isEqualTo: null)
+          .where('status', isEqualTo: 'pending')
+          .get();
 
-  return snapshot.docs.map((doc) => _toProviderJob(doc.id, doc.data())).toList();
+  return snapshot.docs
+      .map((doc) => _toProviderJob(doc.id, doc.data()))
+      .toList();
 }

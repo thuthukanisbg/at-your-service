@@ -12,6 +12,7 @@ class NavTab {
     required this.label,
     required this.body,
     this.showBadge = false,
+    this.badgeStream,
   });
 
   final IconData icon;
@@ -19,6 +20,7 @@ class NavTab {
   final String label;
   final Widget body;
   final bool showBadge;
+  final Stream<bool>? badgeStream;
 }
 
 /// Persistent role shell with shared state/content and native-feeling
@@ -44,37 +46,39 @@ class _RoleNavShellState extends State<RoleNavShell> {
         index: _index,
         children: [for (final tab in widget.tabs) tab.body],
       ),
-      bottomNavigationBar: context.usesCupertinoDesign
-          ? CupertinoTabBar(
-              currentIndex: _index,
-              onTap: (index) => setState(() => _index = index),
-              activeColor: AppColors.primary,
-              inactiveColor: tokens.mut,
-              backgroundColor: tokens.surface.withValues(alpha: 0.96),
-              border: Border(top: BorderSide(color: tokens.line, width: 0.5)),
-              iconSize: 22,
-              height: 52,
-              items: [
-                for (final tab in widget.tabs)
-                  BottomNavigationBarItem(
-                    icon: _TabIcon(tab: tab, selected: false),
-                    activeIcon: _TabIcon(tab: tab, selected: true),
-                    label: tab.label,
-                  ),
-              ],
-            )
-          : NavigationBar(
-              selectedIndex: _index,
-              onDestinationSelected: (index) => setState(() => _index = index),
-              destinations: [
-                for (final tab in widget.tabs)
-                  NavigationDestination(
-                    icon: _TabIcon(tab: tab, selected: false),
-                    selectedIcon: _TabIcon(tab: tab, selected: true),
-                    label: tab.label,
-                  ),
-              ],
-            ),
+      bottomNavigationBar:
+          context.usesCupertinoDesign
+              ? CupertinoTabBar(
+                currentIndex: _index,
+                onTap: (index) => setState(() => _index = index),
+                activeColor: AppColors.primary,
+                inactiveColor: tokens.mut,
+                backgroundColor: tokens.surface.withValues(alpha: 0.96),
+                border: Border(top: BorderSide(color: tokens.line, width: 0.5)),
+                iconSize: 22,
+                height: 52,
+                items: [
+                  for (final tab in widget.tabs)
+                    BottomNavigationBarItem(
+                      icon: _TabIcon(tab: tab, selected: false),
+                      activeIcon: _TabIcon(tab: tab, selected: true),
+                      label: tab.label,
+                    ),
+                ],
+              )
+              : NavigationBar(
+                selectedIndex: _index,
+                onDestinationSelected:
+                    (index) => setState(() => _index = index),
+                destinations: [
+                  for (final tab in widget.tabs)
+                    NavigationDestination(
+                      icon: _TabIcon(tab: tab, selected: false),
+                      selectedIcon: _TabIcon(tab: tab, selected: true),
+                      label: tab.label,
+                    ),
+                ],
+              ),
     );
   }
 }
@@ -88,6 +92,17 @@ class _TabIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final icon = Icon(selected ? tab.selectedIcon : tab.icon, size: 22);
+    if (tab.badgeStream != null) {
+      return StreamBuilder<bool>(
+        stream: tab.badgeStream,
+        initialData: false,
+        builder: (context, snapshot) {
+          return snapshot.data ?? false
+              ? Badge(backgroundColor: AppColors.danger, child: icon)
+              : icon;
+        },
+      );
+    }
     if (!tab.showBadge) return icon;
     return Badge(backgroundColor: AppColors.danger, child: icon);
   }

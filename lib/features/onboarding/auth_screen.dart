@@ -43,10 +43,6 @@ class _AuthScreenState extends State<AuthScreen> {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  void _comingSoon(String what) {
-    _showSnack('$what arrives in the next milestone.');
-  }
-
   void _openPhoneSignIn(BuildContext context) {
     showAppBottomSheet<void>(
       context: context,
@@ -110,6 +106,27 @@ class _AuthScreenState extends State<AuthScreen> {
       if (!mounted) return;
       setState(() => _submitting = false);
       _showSnack('Something went wrong. Please try again.');
+    }
+  }
+
+  Future<void> _signInWithGoogle() async {
+    if (_submitting) return;
+    setState(() => _submitting = true);
+    try {
+      await AuthService.instance.signInWithGoogle();
+      final savedRole = await AuthService.instance.fetchSavedRole();
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => _screenFor(savedRole)),
+      );
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      _showSnack(e.message);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      _showSnack('Google sign-in could not be completed. Please try again.');
     }
   }
 
@@ -246,7 +263,7 @@ class _AuthScreenState extends State<AuthScreen> {
                   child: _SocialButton(
                     icon: LucideIcons.mail,
                     label: 'Google',
-                    onTap: () => _comingSoon('Google sign-in'),
+                    onTap: _signInWithGoogle,
                   ),
                 ),
                 const SizedBox(width: 11),

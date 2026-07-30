@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 import '../../models/user_role.dart';
 
@@ -72,6 +73,7 @@ class _CompletedPhoneVerificationSession implements PhoneVerificationSession {
 /// authentication without a live Firebase app.
 class AuthService {
   static AuthService instance = AuthService();
+  static Future<void>? _googleInitialization;
 
   Future<void> signIn({required String email, required String password}) async {
     try {
@@ -114,6 +116,92 @@ class AuthService {
         });
   }
 
+  /// Signs in with Google and creates a customer profile for a brand-new
+  /// account. Existing users keep their saved role so a provider who later
+  /// links Google is never silently converted into a customer.
+  ///
+  /// Firebase Auth owns the popup on web. Android and iOS use Google's native
+  /// account chooser, then exchange its ID token for a Firebase credential.
+  Future<void> signInWithGoogle() async {
+    final UserCredential credential;
+    try {
+      if (kIsWeb) {
+        credential = await FirebaseAuth.instance.signInWithPopup(
+          GoogleAuthProvider(),
+        );
+      } else if (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS) {
+        _googleInitialization ??= GoogleSignIn.instance.initialize();
+        await _googleInitialization;
+        final googleUser = await GoogleSignIn.instance.authenticate();
+        final googleAuth = googleUser.authentication;
+        if (googleAuth.idToken == null) {
+          throw const AuthException(
+            'Google did not return a valid sign-in token. Please try again.',
+          );
+        }
+        credential = await FirebaseAuth.instance.signInWithCredential(
+          GoogleAuthProvider.credential(idToken: googleAuth.idToken),
+        );
+      } else {
+        throw const AuthException(
+          'Google sign-in is available on Android, iOS, and web.',
+        );
+      }
+
+      final user = credential.user;
+      if (user == null) {
+        throw const AuthException(
+          'Google sign-in did not return an account. Please try again.',
+        );
+      }
+      await _ensureGoogleCustomerProfile(user);
+    } on GoogleSignInException catch (e) {
+      throw AuthException(_googleMessage(e));
+    } on FirebaseAuthException catch (e) {
+      throw AuthException(_friendlyMessage(e));
+    } on AuthException {
+      rethrow;
+    } catch (_) {
+      throw const AuthException(
+        'Google sign-in could not be completed. Please try again.',
+      );
+    }
+  }
+
+  Future<void> _ensureGoogleCustomerProfile(User user) async {
+    final ref = FirebaseFirestore.instance.collection('users').doc(user.uid);
+    try {
+      await FirebaseFirestore.instance.runTransaction((transaction) async {
+        final snapshot = await transaction.get(ref);
+        final profile = <String, Object?>{
+          'name': user.displayName ?? user.email ?? 'Customer',
+          'email': user.email,
+          'photoUrl': user.photoURL,
+          'authProvider': 'google',
+          'lastSignInAt': FieldValue.serverTimestamp(),
+        };
+        if (!snapshot.exists) {
+          transaction.set(ref, {
+            ...profile,
+            'role': 'customer',
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+          return;
+        }
+        final role = snapshot.data()?['role'];
+        if (role == null) profile['role'] = 'customer';
+        transaction.set(ref, profile, SetOptions(merge: true));
+      });
+    } catch (_) {
+      // Do not leave the app inside an authenticated-but-unroutable session.
+      await FirebaseAuth.instance.signOut();
+      throw const AuthException(
+        'Google signed you in, but your customer profile could not be saved. Please try again.',
+      );
+    }
+  }
+
   /// The signed-in user's already-saved role, if any — checked right after
   /// sign-in/sign-up so a returning user who already picked a role skips
   /// RoleSelectScreen. Null covers every case the caller should treat the
@@ -137,7 +225,21 @@ class AuthService {
     }
   }
 
-  Future<void> signOut() => FirebaseAuth.instance.signOut();
+  Future<void> signOut() async {
+    await FirebaseAuth.instance.signOut();
+    if (!kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS)) {
+      try {
+        _googleInitialization ??= GoogleSignIn.instance.initialize();
+        await _googleInitialization;
+        await GoogleSignIn.instance.signOut();
+      } catch (_) {
+        // Firebase is already signed out; stale Google SDK state must never
+        // prevent the user leaving the app session.
+      }
+    }
+  }
 
   /// Sends an SMS verification code using the API Firebase supports on the
   /// current platform: reCAPTCHA-backed [FirebaseAuth.signInWithPhoneNumber]
@@ -239,7 +341,25 @@ class AuthService {
         'That code is incorrect. Please try again.',
       'code-expired' ||
       'session-expired' => 'That code expired — request a new one.',
+      'popup-closed-by-user' ||
+      'cancelled-popup-request' => 'Google sign-in was cancelled.',
+      'popup-blocked' =>
+        'Your browser blocked the Google sign-in window. Allow popups and try again.',
+      'account-exists-with-different-credential' =>
+        'An account already exists for this email. Sign in with its original method first.',
       _ => 'Something went wrong (${e.code}). Please try again.',
+    };
+  }
+
+  static String _googleMessage(GoogleSignInException e) {
+    return switch (e.code) {
+      GoogleSignInExceptionCode.canceled => 'Google sign-in was cancelled.',
+      GoogleSignInExceptionCode.clientConfigurationError ||
+      GoogleSignInExceptionCode.providerConfigurationError =>
+        'Google sign-in is not configured for this app build yet.',
+      GoogleSignInExceptionCode.uiUnavailable =>
+        'Google sign-in could not open. Please try again.',
+      _ => 'Google sign-in could not be completed. Please try again.',
     };
   }
 }
