@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
 import '../../core/theme/app_tokens.dart';
 import 'admin_catalog_service.dart';
 import 'admin_desktop_mock_data.dart';
+import 'admin_management_dialogs.dart';
 import 'admin_status_badge.dart';
 
 /// Category cards are real — `serviceCategories`/`services`, the same
@@ -23,8 +26,27 @@ class AdminDesktopCatalog extends StatefulWidget {
   State<AdminDesktopCatalog> createState() => _AdminDesktopCatalogState();
 }
 
+Future<List<AdminCatalogCategory>> _loadCatalog() async {
+  await Future<void>.delayed(Duration.zero);
+  return fetchCatalog();
+}
+
 class _AdminDesktopCatalogState extends State<AdminDesktopCatalog> {
-  late final Future<List<AdminCatalogCategory>> _catalogFuture = fetchCatalog();
+  Future<List<AdminCatalogCategory>> _catalogFuture = _loadCatalog();
+
+  void _reloadCatalog() {
+    final completer = Completer<List<AdminCatalogCategory>>();
+    setState(() {
+      _catalogFuture = completer.future;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        completer.complete(await fetchCatalog());
+      } catch (error, stackTrace) {
+        completer.completeError(error, stackTrace);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -45,14 +67,29 @@ class _AdminDesktopCatalogState extends State<AdminDesktopCatalog> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Service Catalog', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.4, color: tokens.tx)),
+                        Text(
+                          'Service Catalog',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.4,
+                            color: tokens.tx,
+                          ),
+                        ),
                         const SizedBox(height: 3),
                         FutureBuilder<List<AdminCatalogCategory>>(
                           future: _catalogFuture,
-                          builder: (context, snapshot) => Text(
-                            snapshot.hasData ? '${snapshot.data!.length} service categories' : 'Every category customers can book.',
-                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: tokens.mut),
-                          ),
+                          builder:
+                              (context, snapshot) => Text(
+                                snapshot.hasData
+                                    ? '${snapshot.data!.length} service categories'
+                                    : 'Every category customers can book.',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  color: tokens.mut,
+                                ),
+                              ),
                         ),
                       ],
                     ),
@@ -60,9 +97,21 @@ class _AdminDesktopCatalogState extends State<AdminDesktopCatalog> {
                   const SizedBox(width: 12),
                   Row(
                     children: [
-                      OutlinedButton.icon(onPressed: null, icon: const Icon(LucideIcons.percent, size: 14), label: const Text('New discount')),
+                      OutlinedButton.icon(
+                        onPressed: null,
+                        icon: const Icon(LucideIcons.percent, size: 14),
+                        label: const Text('New discount'),
+                      ),
                       const SizedBox(width: 10),
-                      ElevatedButton.icon(onPressed: null, icon: const Icon(LucideIcons.plus, size: 14), label: const Text('Add category')),
+                      ElevatedButton.icon(
+                        onPressed:
+                            () => showAddServiceCategoryDialog(
+                              context: context,
+                              onCreated: _reloadCatalog,
+                            ),
+                        icon: const Icon(LucideIcons.plus, size: 14),
+                        label: const Text('Add category'),
+                      ),
                     ],
                   ),
                 ],
@@ -74,14 +123,23 @@ class _AdminDesktopCatalogState extends State<AdminDesktopCatalog> {
                   if (!snapshot.hasData && !snapshot.hasError) {
                     return const Padding(
                       padding: EdgeInsets.symmetric(vertical: 48),
-                      child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
+                      child: Center(
+                        child: CircularProgressIndicator(strokeWidth: 2.4),
+                      ),
                     );
                   }
                   if (snapshot.hasError) {
                     return Padding(
                       padding: const EdgeInsets.symmetric(vertical: 48),
                       child: Center(
-                        child: Text("Couldn't load the service catalog.", style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: tokens.mut)),
+                        child: Text(
+                          "Couldn't load the service catalog.",
+                          style: TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w600,
+                            color: tokens.mut,
+                          ),
+                        ),
                       ),
                     );
                   }
@@ -90,7 +148,14 @@ class _AdminDesktopCatalogState extends State<AdminDesktopCatalog> {
                     return Padding(
                       padding: const EdgeInsets.symmetric(vertical: 48),
                       child: Center(
-                        child: Text('No service categories yet.', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: tokens.mut)),
+                        child: Text(
+                          'No service categories yet.',
+                          style: TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w600,
+                            color: tokens.mut,
+                          ),
+                        ),
                       ),
                     );
                   }
@@ -101,22 +166,40 @@ class _AdminDesktopCatalogState extends State<AdminDesktopCatalog> {
                     mainAxisSpacing: 14,
                     crossAxisSpacing: 14,
                     childAspectRatio: 1.5,
-                    children: [for (final c in categories) _CatalogCard(category: c)],
+                    children: [
+                      for (final c in categories) _CatalogCard(category: c),
+                    ],
                   );
                 },
               ),
               const SizedBox(height: 14),
               Container(
-                decoration: BoxDecoration(color: tokens.card, border: Border.all(color: tokens.line), borderRadius: BorderRadius.circular(16)),
+                decoration: BoxDecoration(
+                  color: tokens.card,
+                  border: Border.all(color: tokens.line),
+                  borderRadius: BorderRadius.circular(16),
+                ),
                 clipBehavior: Clip.antiAlias,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: tokens.line))),
-                      child: Text('Active discounts', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: tokens.tx)),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 16,
+                      ),
+                      decoration: BoxDecoration(
+                        border: Border(bottom: BorderSide(color: tokens.line)),
+                      ),
+                      child: Text(
+                        'Active discounts',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          color: tokens.tx,
+                        ),
+                      ),
                     ),
                     SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
@@ -132,14 +215,62 @@ class _AdminDesktopCatalogState extends State<AdminDesktopCatalog> {
                         ],
                         rows: [
                           for (final d in mockDiscounts)
-                            DataRow(cells: [
-                              DataCell(Text(d.code, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: tokens.tx, letterSpacing: 0.2))),
-                              DataCell(Text(d.discount, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: tokens.tx))),
-                              DataCell(Text(d.category, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: tokens.mut))),
-                              DataCell(Text(d.expires, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: tokens.mut))),
-                              DataCell(Text('${d.uses}', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: tokens.tx))),
-                              DataCell(StatusBadge(status: d.status)),
-                            ]),
+                            DataRow(
+                              cells: [
+                                DataCell(
+                                  Text(
+                                    d.code,
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w800,
+                                      color: tokens.tx,
+                                      letterSpacing: 0.2,
+                                    ),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    d.discount,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: tokens.tx,
+                                    ),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    d.category,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: tokens.mut,
+                                    ),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    d.expires,
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: tokens.mut,
+                                    ),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    '${d.uses}',
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: tokens.tx,
+                                    ),
+                                  ),
+                                ),
+                                DataCell(StatusBadge(status: d.status)),
+                              ],
+                            ),
                         ],
                       ),
                     ),
@@ -163,7 +294,11 @@ class _CatalogCard extends StatelessWidget {
     final tokens = context.tokens;
     return Container(
       padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(color: tokens.card, border: Border.all(color: tokens.line), borderRadius: BorderRadius.circular(16)),
+      decoration: BoxDecoration(
+        color: tokens.card,
+        border: Border.all(color: tokens.line),
+        borderRadius: BorderRadius.circular(16),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -173,7 +308,10 @@ class _CatalogCard extends StatelessWidget {
               Container(
                 width: 36,
                 height: 36,
-                decoration: BoxDecoration(color: category.bg, borderRadius: BorderRadius.circular(10)),
+                decoration: BoxDecoration(
+                  color: category.bg,
+                  borderRadius: BorderRadius.circular(10),
+                ),
                 alignment: Alignment.center,
                 child: Icon(category.icon, size: 17, color: category.color),
               ),
@@ -181,16 +319,38 @@ class _CatalogCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          Text(category.name, style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800, color: tokens.tx)),
+          Text(
+            category.name,
+            style: TextStyle(
+              fontSize: 15.5,
+              fontWeight: FontWeight.w800,
+              color: tokens.tx,
+            ),
+          ),
           const Spacer(),
-          _KvRow(label: 'Base price', value: category.priceLabel, tokens: tokens),
-          _KvRow(label: 'Avg. duration', value: category.durationLabel, tokens: tokens),
-          _KvRow(label: 'Active providers', value: '${category.activeProviders}', tokens: tokens),
+          _KvRow(
+            label: 'Base price',
+            value: category.priceLabel,
+            tokens: tokens,
+          ),
+          _KvRow(
+            label: 'Avg. duration',
+            value: category.durationLabel,
+            tokens: tokens,
+          ),
+          _KvRow(
+            label: 'Active providers',
+            value: '${category.activeProviders}',
+            tokens: tokens,
+          ),
           const SizedBox(height: 8),
           SizedBox(
             width: double.infinity,
             height: 34,
-            child: OutlinedButton(onPressed: null, child: const Text('Edit pricing')),
+            child: OutlinedButton(
+              onPressed: null,
+              child: const Text('Edit pricing'),
+            ),
           ),
         ],
       ),
@@ -199,7 +359,11 @@ class _CatalogCard extends StatelessWidget {
 }
 
 class _KvRow extends StatelessWidget {
-  const _KvRow({required this.label, required this.value, required this.tokens});
+  const _KvRow({
+    required this.label,
+    required this.value,
+    required this.tokens,
+  });
   final String label;
   final String value;
   final AppTokens tokens;
@@ -208,12 +372,28 @@ class _KvRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 7),
-      decoration: BoxDecoration(border: Border(top: BorderSide(color: tokens.line))),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: tokens.line)),
+      ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: tokens.mut)),
-          Text(value, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: tokens.tx)),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              color: tokens.mut,
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w700,
+              color: tokens.tx,
+            ),
+          ),
         ],
       ),
     );

@@ -8,10 +8,17 @@ import 'package:at_your_service/core/services/auth_service.dart';
 /// live Firebase app, which widget tests don't have.
 class _StubAuthService extends AuthService {
   @override
-  Future<void> signIn({required String email, required String password}) async {}
+  Future<void> signIn({
+    required String email,
+    required String password,
+  }) async {}
 
   @override
-  Future<void> signUp({required String name, required String email, required String password}) async {}
+  Future<void> signUp({
+    required String name,
+    required String email,
+    required String password,
+  }) async {}
 }
 
 /// Walks from the app's real entry point (Splash) to the role chooser via
@@ -49,17 +56,19 @@ void main() {
     AuthService.instance = _StubAuthService();
   });
 
-  testWidgets('role select screen lists all three roles', (tester) async {
+  testWidgets('role select screen lists only public roles', (tester) async {
     await tester.pumpWidget(const AtYourServiceApp());
     await _skipToChooser(tester);
 
     expect(find.text('At Your Service'), findsOneWidget);
     expect(find.text('Customer'), findsOneWidget);
     expect(find.text('Provider'), findsOneWidget);
-    expect(find.text('Admin'), findsOneWidget);
+    expect(find.text('Admin'), findsNothing);
   });
 
-  testWidgets('selecting Customer navigates to the customer home screen', (tester) async {
+  testWidgets('selecting Customer navigates to the customer home screen', (
+    tester,
+  ) async {
     await tester.pumpWidget(const AtYourServiceApp());
     await _skipToChooser(tester);
 
@@ -69,7 +78,9 @@ void main() {
     expect(find.text('Hello, Thandi 👋'), findsOneWidget);
   });
 
-  testWidgets('selecting Provider navigates to the provider home screen', (tester) async {
+  testWidgets('selecting Provider navigates to the provider home screen', (
+    tester,
+  ) async {
     await tester.pumpWidget(const AtYourServiceApp());
     await _skipToChooser(tester);
 
@@ -77,20 +88,5 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('My Jobs'), findsOneWidget);
-  });
-
-  testWidgets('selecting Admin navigates to the admin home screen', (tester) async {
-    await tester.pumpWidget(const AtYourServiceApp());
-    await _skipToChooser(tester);
-
-    // At the handoff's exact 392px frame width, the role card descriptions
-    // wrap onto more lines than they used to, pushing Admin (the last card)
-    // below the default test viewport — scroll it into view first.
-    await tester.ensureVisible(find.text('Admin'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Admin'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Dashboard'), findsOneWidget);
   });
 }

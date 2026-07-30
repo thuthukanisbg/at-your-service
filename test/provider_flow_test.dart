@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lucide_icons/lucide_icons.dart';
 
 import 'package:at_your_service/app.dart';
 import 'package:at_your_service/core/services/auth_service.dart';
@@ -9,6 +10,7 @@ import 'package:at_your_service/features/disputes/file_dispute_screen.dart';
 import 'package:at_your_service/features/provider/provider_earnings_screen.dart';
 import 'package:at_your_service/features/provider/provider_in_progress_screen.dart';
 import 'package:at_your_service/features/provider/provider_job_details_screen.dart';
+import 'package:at_your_service/features/provider/provider_jobs_service.dart';
 import 'package:at_your_service/features/provider/provider_navigate_screen.dart';
 import 'package:at_your_service/features/provider/provider_profile_screen.dart';
 import 'package:at_your_service/features/provider/provider_schedule_screen.dart';
@@ -51,18 +53,40 @@ Future<void> _skipToChooser(WidgetTester tester) async {
 /// live Firebase app, which widget tests don't have.
 class _StubAuthService extends AuthService {
   @override
-  Future<void> signIn({required String email, required String password}) async {}
+  Future<void> signIn({
+    required String email,
+    required String password,
+  }) async {}
 
   @override
-  Future<void> signUp({required String name, required String email, required String password}) async {}
+  Future<void> signUp({
+    required String name,
+    required String email,
+    required String password,
+  }) async {}
+}
+
+class _StubLifecycleService extends ProviderJobLifecycleService {
+  final statuses = <String>[];
+
+  @override
+  Future<void> updateStatus(String bookingId, String status) async {
+    statuses.add(status);
+  }
 }
 
 void main() {
+  late _StubLifecycleService lifecycle;
+
   setUp(() {
     AuthService.instance = _StubAuthService();
+    lifecycle = _StubLifecycleService();
+    ProviderJobLifecycleService.instance = lifecycle;
   });
 
-  testWidgets('provider jobs list opens Job Details for the tapped job', (tester) async {
+  testWidgets('provider jobs list opens Job Details for the tapped job', (
+    tester,
+  ) async {
     await tester.pumpWidget(const AtYourServiceApp());
     await _skipToChooser(tester);
     await tester.tap(find.text('Provider'));
@@ -80,9 +104,30 @@ void main() {
     expect(find.textContaining('R675'), findsOneWidget);
   });
 
+  testWidgets('provider Messages tab has a real empty inbox', (tester) async {
+    await tester.pumpWidget(const AtYourServiceApp());
+    await _skipToChooser(tester);
+    await tester.tap(find.text('Provider'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(LucideIcons.messageCircle));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No conversations yet.'), findsOneWidget);
+  });
+
   testWidgets('Job Details Accept Job opens Navigate', (tester) async {
     await tester.pumpWidget(
-      _harness(const ProviderJobDetailsScreen(job: ProviderJob(title: 'Deep House Cleaning', price: 600, timeLabel: 'Today · 10:00 AM', distanceLabel: '2.3 km'))),
+      _harness(
+        const ProviderJobDetailsScreen(
+          job: ProviderJob(
+            title: 'Deep House Cleaning',
+            price: 600,
+            timeLabel: 'Today · 10:00 AM',
+            distanceLabel: '2.3 km',
+          ),
+        ),
+      ),
     );
 
     expect(find.text('CUSTOMER NOTES'), findsOneWidget);
@@ -94,42 +139,73 @@ void main() {
     expect(find.text('Start Navigation'), findsOneWidget);
   });
 
-  testWidgets('Job Details shows Report an issue only for an already-accepted real job', (tester) async {
-    // Not shown on an Available-tab job (isAlreadyAccepted: false, the
-    // default) — reporting an issue only makes sense once it's actually
-    // this provider's job.
-    await tester.pumpWidget(
-      _harness(const ProviderJobDetailsScreen(
-        job: ProviderJob(id: 'job-1', customerId: 'customer-1', title: 'Deep House Cleaning', price: 600, timeLabel: 'Today · 10:00 AM', distanceLabel: '2.3 km'),
-      )),
-    );
-    expect(find.text('Report an issue'), findsNothing);
+  testWidgets(
+    'Job Details shows Report an issue only for an already-accepted real job',
+    (tester) async {
+      // Not shown on an Available-tab job (isAlreadyAccepted: false, the
+      // default) — reporting an issue only makes sense once it's actually
+      // this provider's job.
+      await tester.pumpWidget(
+        _harness(
+          const ProviderJobDetailsScreen(
+            job: ProviderJob(
+              id: 'job-1',
+              customerId: 'customer-1',
+              title: 'Deep House Cleaning',
+              price: 600,
+              timeLabel: 'Today · 10:00 AM',
+              distanceLabel: '2.3 km',
+            ),
+          ),
+        ),
+      );
+      expect(find.text('Report an issue'), findsNothing);
 
-    // Shown once accepted. Tapping it resolves the provider's own uid via
-    // FirebaseAuth, which is unavailable in tests (no live Firebase app) —
-    // same limitation as this screen's existing "Message Customer" button —
-    // so this only confirms the button renders and doesn't crash on tap,
-    // not the full navigation (covered separately by pumping
-    // FileDisputeScreen directly below).
-    await tester.pumpWidget(
-      _harness(const ProviderJobDetailsScreen(
-        job: ProviderJob(id: 'job-1', customerId: 'customer-1', title: 'Deep House Cleaning', price: 600, timeLabel: 'Today · 10:00 AM', distanceLabel: '2.3 km'),
-        isAlreadyAccepted: true,
-      )),
-    );
-    await tester.scrollUntilVisible(find.text('Report an issue'), 300, scrollable: find.byType(Scrollable));
-    expect(find.text('Report an issue'), findsOneWidget);
-    await tester.tap(find.text('Report an issue'));
-    await tester.pump();
-  });
+      // Shown once accepted. Tapping it resolves the provider's own uid via
+      // FirebaseAuth, which is unavailable in tests (no live Firebase app) —
+      // same limitation as this screen's existing "Message Customer" button —
+      // so this only confirms the button renders and doesn't crash on tap,
+      // not the full navigation (covered separately by pumping
+      // FileDisputeScreen directly below).
+      await tester.pumpWidget(
+        _harness(
+          const ProviderJobDetailsScreen(
+            job: ProviderJob(
+              id: 'job-1',
+              customerId: 'customer-1',
+              title: 'Deep House Cleaning',
+              price: 600,
+              timeLabel: 'Today · 10:00 AM',
+              distanceLabel: '2.3 km',
+            ),
+            isAlreadyAccepted: true,
+          ),
+        ),
+      );
+      await tester.scrollUntilVisible(
+        find.text('Report an issue'),
+        300,
+        scrollable: find.byType(Scrollable),
+      );
+      expect(find.text('Report an issue'), findsOneWidget);
+      await tester.tap(find.text('Report an issue'));
+      await tester.pump();
+    },
+  );
 
-  testWidgets('FileDisputeScreen renders subject/priority/description fields', (tester) async {
-    await tester.pumpWidget(_harness(const FileDisputeScreen(
-      bookingId: 'booking-1',
-      customerId: 'customer-1',
-      providerId: 'provider-1',
-      serviceName: 'Deep House Cleaning',
-    )));
+  testWidgets('FileDisputeScreen renders subject/priority/description fields', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _harness(
+        const FileDisputeScreen(
+          bookingId: 'booking-1',
+          customerId: 'customer-1',
+          providerId: 'provider-1',
+          serviceName: 'Deep House Cleaning',
+        ),
+      ),
+    );
 
     expect(find.text('Report a Problem'), findsOneWidget);
     expect(find.text('Deep House Cleaning'), findsOneWidget);
@@ -148,46 +224,102 @@ void main() {
     expect(find.text('Job in Progress'), findsOneWidget);
   });
 
-  testWidgets('In Progress task toggle updates status and Complete Job pops to root', (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.dark(),
-        builder: (context, child) => MobileFrame(child: child!),
-        home: Builder(
-          builder: (context) => Scaffold(
-            body: Center(
-              child: ElevatedButton(
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const ProviderInProgressScreen()),
-                ),
-                child: const Text('open in-progress screen'),
-              ),
+  testWidgets(
+    'accepted real job travels, starts, and completes in backend order',
+    (tester) async {
+      await tester.pumpWidget(
+        _harness(
+          const ProviderJobDetailsScreen(
+            job: ProviderJob(
+              id: 'job-1',
+              customerId: 'customer-1',
+              title: 'Deep House Cleaning',
+              price: 600,
+              timeLabel: 'Today · 10:00 AM',
+              distanceLabel: 'Cape Town',
+              address: '23 Loop Street, Cape Town',
+              status: 'accepted',
             ),
+            isAlreadyAccepted: true,
           ),
         ),
-      ),
-    );
+      );
+      await tester.pump();
 
-    await tester.tap(find.text('open in-progress screen'));
-    await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Start Travel'),
+        300,
+        scrollable: find.byType(Scrollable),
+      );
+      await tester.tap(find.text('Start Travel'));
+      await tester.pumpAndSettle();
 
-    // Matches the handoff's initial demo state: first two tasks done already.
-    expect(find.text('Completed'), findsNWidgets(2));
-    expect(find.text('In progress'), findsNWidgets(2));
+      expect(lifecycle.statuses, ['en_route']);
+      expect(find.text('Navigate'), findsOneWidget);
+      expect(find.text('23 Loop Street, Cape Town'), findsOneWidget);
 
-    await tester.tap(find.text('Floor & surface cleaning'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('Arrived · Start Job'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('Completed'), findsNWidgets(3));
-    expect(find.text('In progress'), findsNWidgets(1));
+      expect(lifecycle.statuses, ['en_route', 'in_progress']);
+      expect(find.text('Job in Progress'), findsOneWidget);
 
-    await tester.tap(find.text('Complete Job'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('Complete Job'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('open in-progress screen'), findsOneWidget);
-  });
+      expect(lifecycle.statuses, ['en_route', 'in_progress', 'completed']);
+    },
+  );
 
-  testWidgets('provider Schedule tab renders the week strip and appointments', (tester) async {
+  testWidgets(
+    'In Progress task toggle updates status and Complete Job pops to root',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.dark(),
+          builder: (context, child) => MobileFrame(child: child!),
+          home: Builder(
+            builder:
+                (context) => Scaffold(
+                  body: Center(
+                    child: ElevatedButton(
+                      onPressed:
+                          () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const ProviderInProgressScreen(),
+                            ),
+                          ),
+                      child: const Text('open in-progress screen'),
+                    ),
+                  ),
+                ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('open in-progress screen'));
+      await tester.pumpAndSettle();
+
+      // Matches the handoff's initial demo state: first two tasks done already.
+      expect(find.text('Completed'), findsNWidgets(2));
+      expect(find.text('In progress'), findsNWidgets(2));
+
+      await tester.tap(find.text('Floor & surface cleaning'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Completed'), findsNWidgets(3));
+      expect(find.text('In progress'), findsNWidgets(1));
+
+      await tester.tap(find.text('Complete Job'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('open in-progress screen'), findsOneWidget);
+    },
+  );
+
+  testWidgets('provider Schedule tab renders the week strip and appointments', (
+    tester,
+  ) async {
     await tester.pumpWidget(_harness(const ProviderScheduleScreen()));
 
     expect(find.text('Schedule'), findsOneWidget);
@@ -195,7 +327,9 @@ void main() {
     expect(find.text('Deep House Cleaning'), findsOneWidget);
   });
 
-  testWidgets('provider Earnings tab renders the monthly total and payouts', (tester) async {
+  testWidgets('provider Earnings tab renders the monthly total and payouts', (
+    tester,
+  ) async {
     await tester.pumpWidget(_harness(const ProviderEarningsScreen()));
 
     expect(find.text('R24,580'), findsOneWidget);
@@ -203,7 +337,9 @@ void main() {
     expect(find.text('R4,820'), findsOneWidget);
   });
 
-  testWidgets('provider Profile tab renders stats and verification status', (tester) async {
+  testWidgets('provider Profile tab renders stats and verification status', (
+    tester,
+  ) async {
     await tester.pumpWidget(_harness(const ProviderProfileScreen()));
 
     expect(find.text('Sipho M.'), findsOneWidget);

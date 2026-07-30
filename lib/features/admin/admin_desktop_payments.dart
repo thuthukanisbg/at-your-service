@@ -30,37 +30,95 @@ class AdminDesktopPayments extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Payments & Payouts', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.4, color: tokens.tx)),
+                        Text(
+                          'Payments & Payouts',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.4,
+                            color: tokens.tx,
+                          ),
+                        ),
                         const SizedBox(height: 3),
-                        Text('R412,900 processed this month', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: tokens.mut)),
+                        Text(
+                          'Preview layout — payment processing is not connected',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: tokens.mut,
+                          ),
+                        ),
                       ],
                     ),
                   ),
                   const SizedBox(width: 12),
-                  OutlinedButton.icon(onPressed: null, icon: const Icon(LucideIcons.download, size: 14), label: const Text('Export')),
+                  OutlinedButton.icon(
+                    onPressed: null,
+                    icon: const Icon(LucideIcons.download, size: 14),
+                    label: const Text('Export'),
+                  ),
                 ],
+              ),
+              const SizedBox(height: 20),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 13,
+                ),
+                decoration: BoxDecoration(
+                  color: tokens.elev,
+                  border: Border.all(color: tokens.line),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Text(
+                  'The figures below are design preview data. No transaction, payout, refund, or payment gateway collection is connected yet.',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    height: 1.4,
+                    fontWeight: FontWeight.w600,
+                    color: tokens.mut,
+                  ),
+                ),
               ),
               const SizedBox(height: 20),
               Row(
                 children: [
                   for (var i = 0; i < mockPaymentStats.length; i++) ...[
                     Expanded(child: _StatCard(stat: mockPaymentStats[i])),
-                    if (i != mockPaymentStats.length - 1) const SizedBox(width: 14),
+                    if (i != mockPaymentStats.length - 1)
+                      const SizedBox(width: 14),
                   ],
                 ],
               ),
               const SizedBox(height: 20),
               Container(
-                decoration: BoxDecoration(color: tokens.card, border: Border.all(color: tokens.line), borderRadius: BorderRadius.circular(16)),
+                decoration: BoxDecoration(
+                  color: tokens.card,
+                  border: Border.all(color: tokens.line),
+                  borderRadius: BorderRadius.circular(16),
+                ),
                 clipBehavior: Clip.antiAlias,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: tokens.line))),
-                      child: Text('Transactions', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: tokens.tx)),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 16,
+                      ),
+                      decoration: BoxDecoration(
+                        border: Border(bottom: BorderSide(color: tokens.line)),
+                      ),
+                      child: Text(
+                        'Transactions',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          color: tokens.tx,
+                        ),
+                      ),
                     ),
                     SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
@@ -77,15 +135,71 @@ class AdminDesktopPayments extends StatelessWidget {
                         ],
                         rows: [
                           for (final t in mockTransactions)
-                            DataRow(cells: [
-                              DataCell(Text(t.id, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: tokens.mut))),
-                              DataCell(Text(t.type, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: tokens.tx))),
-                              DataCell(Text(t.party, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: tokens.tx))),
-                              DataCell(Text(t.method, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: tokens.mut))),
-                              DataCell(Text(t.amount, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: tokens.tx))),
-                              DataCell(Text(t.date, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: tokens.mut))),
-                              DataCell(StatusBadge(status: t.status)),
-                            ]),
+                            DataRow(
+                              cells: [
+                                DataCell(
+                                  Text(
+                                    t.id,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: tokens.mut,
+                                    ),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    t.type,
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: tokens.tx,
+                                    ),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    t.party,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: tokens.tx,
+                                    ),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    t.method,
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: tokens.mut,
+                                    ),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    t.amount,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w800,
+                                      color: tokens.tx,
+                                    ),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    t.date,
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: tokens.mut,
+                                    ),
+                                  ),
+                                ),
+                                DataCell(StatusBadge(status: t.status)),
+                              ],
+                            ),
                         ],
                       ),
                     ),
@@ -109,21 +223,43 @@ class _StatCard extends StatelessWidget {
     final tokens = context.tokens;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-      decoration: BoxDecoration(color: tokens.card, border: Border.all(color: tokens.line), borderRadius: BorderRadius.circular(16)),
+      decoration: BoxDecoration(
+        color: tokens.card,
+        border: Border.all(color: tokens.line),
+        borderRadius: BorderRadius.circular(16),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             width: 32,
             height: 32,
-            decoration: BoxDecoration(color: stat.bg, borderRadius: BorderRadius.circular(9)),
+            decoration: BoxDecoration(
+              color: stat.bg,
+              borderRadius: BorderRadius.circular(9),
+            ),
             alignment: Alignment.center,
             child: Icon(stat.icon, size: 15, color: stat.color),
           ),
           const SizedBox(height: 12),
-          Text(stat.value, style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -0.3, color: tokens.tx)),
+          Text(
+            stat.value,
+            style: TextStyle(
+              fontSize: 19,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.3,
+              color: tokens.tx,
+            ),
+          ),
           const SizedBox(height: 2),
-          Text(stat.label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: tokens.mut)),
+          Text(
+            stat.label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: tokens.mut,
+            ),
+          ),
         ],
       ),
     );

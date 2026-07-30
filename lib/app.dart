@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_mode_controller.dart';
 import 'core/widgets/mobile_frame.dart';
+import 'core/widgets/platform_chrome.dart';
 import 'features/admin/admin_login_screen.dart';
 import 'features/admin/admin_shell.dart';
 import 'features/customer/customer_shell.dart';
@@ -23,7 +24,8 @@ class AtYourServiceApp extends StatelessWidget {
           theme: AppTheme.light(),
           darkTheme: AppTheme.dark(),
           themeMode: themeMode,
-          builder: (context, child) => MobileFrame(child: child!),
+          builder: (context, child) =>
+              PlatformChrome(child: MobileFrame(child: child!)),
           initialRoute: SplashScreen.routeName,
           routes: {
             SplashScreen.routeName: (_) => const SplashScreen(),

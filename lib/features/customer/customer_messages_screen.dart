@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
@@ -24,7 +25,12 @@ class CustomerMessagesScreen extends StatelessWidget {
                 alignment: Alignment.centerLeft,
                 child: Text(
                   'Messages',
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.5, color: tokens.tx),
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.5,
+                    color: tokens.tx,
+                  ),
                 ),
               ),
             ),
@@ -33,11 +39,20 @@ class CustomerMessagesScreen extends StatelessWidget {
                 stream: watchMyConversationsAsCustomer(),
                 builder: (context, snapshot) {
                   if (!snapshot.hasData && !snapshot.hasError) {
-                    return const Center(child: CircularProgressIndicator(strokeWidth: 2.4));
+                    return const Center(
+                      child: CircularProgressIndicator(strokeWidth: 2.4),
+                    );
                   }
                   if (snapshot.hasError) {
                     return Center(
-                      child: Text("Couldn't load messages.", style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: tokens.mut)),
+                      child: Text(
+                        "Couldn't load messages.",
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
+                          color: tokens.mut,
+                        ),
+                      ),
                     );
                   }
                   final conversations = snapshot.data!;
@@ -45,14 +60,21 @@ class CustomerMessagesScreen extends StatelessWidget {
                     return Center(
                       child: Text(
                         'No conversations yet.',
-                        style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: tokens.mut),
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
+                          color: tokens.mut,
+                        ),
                       ),
                     );
                   }
                   return ListView.builder(
                     padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
                     itemCount: conversations.length,
-                    itemBuilder: (context, index) => _ConversationTile(conversation: conversations[index]),
+                    itemBuilder:
+                        (context, index) => _ConversationTile(
+                          conversation: conversations[index],
+                        ),
                   );
                 },
               ),
@@ -70,30 +92,38 @@ class _ConversationTile extends StatelessWidget {
   final ConversationSummary conversation;
 
   Future<String> _providerName() async {
-    final doc = await FirebaseFirestore.instance.collection('providers').doc(conversation.providerId).get();
+    final doc =
+        await FirebaseFirestore.instance
+            .collection('providers')
+            .doc(conversation.providerId)
+            .get();
     return doc.data()?['displayName'] as String? ?? 'Your provider';
   }
 
   @override
   Widget build(BuildContext context) {
     final tokens = context.tokens;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final unread = uid != null && conversation.isUnreadFor(uid);
     return FutureBuilder<String>(
       future: _providerName(),
       builder: (context, snapshot) {
         final providerName = snapshot.data ?? conversation.serviceName;
         return InkWell(
           borderRadius: BorderRadius.circular(14),
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => ConversationScreen(
-                bookingId: conversation.bookingId,
-                customerId: conversation.customerId,
-                providerId: conversation.providerId,
-                serviceName: conversation.serviceName,
-                otherPartyName: providerName,
+          onTap:
+              () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder:
+                      (_) => ConversationScreen(
+                        bookingId: conversation.bookingId,
+                        customerId: conversation.customerId,
+                        providerId: conversation.providerId,
+                        serviceName: conversation.serviceName,
+                        otherPartyName: providerName,
+                      ),
+                ),
               ),
-            ),
-          ),
           child: Container(
             margin: const EdgeInsets.only(bottom: 10),
             padding: const EdgeInsets.all(14),
@@ -107,30 +137,77 @@ class _ConversationTile extends StatelessWidget {
                 Container(
                   width: 42,
                   height: 42,
-                  decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.14), shape: BoxShape.circle),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.14),
+                    shape: BoxShape.circle,
+                  ),
                   alignment: Alignment.center,
-                  child: const Icon(LucideIcons.user, size: 19, color: AppColors.primary),
+                  child: const Icon(
+                    LucideIcons.user,
+                    size: 19,
+                    color: AppColors.primary,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(providerName, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: tokens.tx)),
-                      const SizedBox(height: 2),
                       Text(
-                        conversation.lastMessageText ?? conversation.serviceName,
+                        providerName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500, color: tokens.mut),
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          color: tokens.tx,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        conversation.lastMessageText ??
+                            conversation.serviceName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight:
+                              unread ? FontWeight.w800 : FontWeight.w500,
+                          color: unread ? tokens.tx : tokens.mut,
+                        ),
                       ),
                     ],
                   ),
                 ),
                 if (conversation.lastMessageAt != null)
-                  Text(
-                    formatSchedule(conversation.lastMessageAt!),
-                    style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: tokens.mut),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          formatSchedule(conversation.lastMessageAt!),
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                            color: tokens.mut,
+                          ),
+                        ),
+                        if (unread) ...[
+                          const SizedBox(height: 7),
+                          const SizedBox(
+                            width: 8,
+                            height: 8,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: AppColors.danger,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
               ],
             ),

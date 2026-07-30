@@ -1,9 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_tokens.dart';
+import '../../models/user_role.dart';
+import 'admin_management_dialogs.dart';
 import 'admin_providers_service.dart';
+import 'admin_responsive_table.dart';
 import 'admin_status_badge.dart';
 
 /// Desktop counterpart to `AdminProvidersScreen` — same data
@@ -32,9 +37,28 @@ class AdminDesktopProviders extends StatefulWidget {
 
 const _tabs = ['All', 'Active', 'Suspended'];
 
+Future<List<AdminProviderSummary>> _loadProviders() async {
+  await Future<void>.delayed(Duration.zero);
+  return fetchProviders();
+}
+
 class _AdminDesktopProvidersState extends State<AdminDesktopProviders> {
-  late final Future<List<AdminProviderSummary>> _providersFuture = fetchProviders();
+  Future<List<AdminProviderSummary>> _providersFuture = _loadProviders();
   String _filter = 'All';
+
+  void _reloadProviders() {
+    final completer = Completer<List<AdminProviderSummary>>();
+    setState(() {
+      _providersFuture = completer.future;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        completer.complete(await fetchProviders());
+      } catch (error, stackTrace) {
+        completer.completeError(error, stackTrace);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -42,8 +66,8 @@ class _AdminDesktopProvidersState extends State<AdminDesktopProviders> {
     return SafeArea(
       child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(32, 28, 32, 32),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1400),
+        child: SizedBox(
+          width: double.infinity,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -55,23 +79,43 @@ class _AdminDesktopProvidersState extends State<AdminDesktopProviders> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Providers', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.4, color: tokens.tx)),
+                        Text(
+                          'Providers',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.4,
+                            color: tokens.tx,
+                          ),
+                        ),
                         const SizedBox(height: 3),
                         FutureBuilder<List<AdminProviderSummary>>(
                           future: _providersFuture,
-                          builder: (context, snapshot) => Text(
-                            snapshot.hasData ? '${snapshot.data!.length} providers on the platform' : 'Everyone approved to work jobs on the platform.',
-                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: tokens.mut),
-                          ),
+                          builder:
+                              (context, snapshot) => Text(
+                                snapshot.hasData
+                                    ? '${snapshot.data!.length} providers on the platform'
+                                    : 'Everyone approved to work jobs on the platform.',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  color: tokens.mut,
+                                ),
+                              ),
                         ),
                       ],
                     ),
                   ),
                   const SizedBox(width: 12),
                   ElevatedButton.icon(
-                    onPressed: null,
+                    onPressed:
+                        () => showAddManagedUserDialog(
+                          context: context,
+                          role: UserRole.provider,
+                          onCreated: _reloadProviders,
+                        ),
                     icon: const Icon(LucideIcons.userPlus, size: 14),
-                    label: const Text('Invite provider'),
+                    label: const Text('Add provider'),
                   ),
                 ],
               ),
@@ -81,7 +125,11 @@ class _AdminDesktopProvidersState extends State<AdminDesktopProviders> {
                 runSpacing: 6,
                 children: [
                   for (final tab in _tabs)
-                    _FilterTab(label: tab, selected: _filter == tab, onTap: () => setState(() => _filter = tab)),
+                    _FilterTab(
+                      label: tab,
+                      selected: _filter == tab,
+                      onTap: () => setState(() => _filter = tab),
+                    ),
                 ],
               ),
               const SizedBox(height: 16),
@@ -91,40 +139,69 @@ class _AdminDesktopProvidersState extends State<AdminDesktopProviders> {
                   if (!snapshot.hasData && !snapshot.hasError) {
                     return const Padding(
                       padding: EdgeInsets.symmetric(vertical: 48),
-                      child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
+                      child: Center(
+                        child: CircularProgressIndicator(strokeWidth: 2.4),
+                      ),
                     );
                   }
                   if (snapshot.hasError) {
                     return Padding(
                       padding: const EdgeInsets.symmetric(vertical: 48),
                       child: Center(
-                        child: Text("Couldn't load providers.", style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: tokens.mut)),
+                        child: Text(
+                          "Couldn't load providers.",
+                          style: TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w600,
+                            color: tokens.mut,
+                          ),
+                        ),
                       ),
                     );
                   }
-                  final displayed = snapshot.data!.map((p) {
-                    final isActive = p.status == 'active';
-                    return (provider: p, displayStatus: isActive ? 'Active' : 'Suspended');
-                  }).where((row) => _filter == 'All' || row.displayStatus == _filter).toList();
+                  final displayed =
+                      snapshot.data!
+                          .map((p) {
+                            final isActive = p.status == 'active';
+                            return (
+                              provider: p,
+                              displayStatus: isActive ? 'Active' : 'Suspended',
+                            );
+                          })
+                          .where(
+                            (row) =>
+                                _filter == 'All' ||
+                                row.displayStatus == _filter,
+                          )
+                          .toList();
                   if (displayed.isEmpty) {
                     return Padding(
                       padding: const EdgeInsets.symmetric(vertical: 48),
                       child: Center(
-                        child: Text('No providers match this filter.', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: tokens.mut)),
+                        child: Text(
+                          'No providers match this filter.',
+                          style: TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w600,
+                            color: tokens.mut,
+                          ),
+                        ),
                       ),
                     );
                   }
                   return Container(
+                    width: double.infinity,
                     decoration: BoxDecoration(
                       color: tokens.card,
                       border: Border.all(color: tokens.line),
                       borderRadius: BorderRadius.circular(16),
                     ),
                     clipBehavior: Clip.antiAlias,
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: DataTable(
+                    child: AdminResponsiveDataTable(
+                      table: DataTable(
                         headingRowColor: WidgetStateProperty.all(tokens.elev),
+                        columnSpacing: 42,
+                        horizontalMargin: 24,
                         columns: const [
                           DataColumn(label: Text('Provider')),
                           DataColumn(label: Text('Category')),
@@ -145,22 +222,81 @@ class _AdminDesktopProvidersState extends State<AdminDesktopProviders> {
                                       Container(
                                         width: 28,
                                         height: 28,
-                                        decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(8)),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.primary.withValues(
+                                            alpha: 0.14,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                        ),
                                         alignment: Alignment.center,
-                                        child: const Icon(LucideIcons.user, size: 15, color: AppColors.primary),
+                                        child: const Icon(
+                                          LucideIcons.user,
+                                          size: 15,
+                                          color: AppColors.primary,
+                                        ),
                                       ),
                                       const SizedBox(width: 10),
-                                      Text(row.provider.displayName, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: tokens.tx)),
+                                      Text(
+                                        row.provider.displayName,
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w700,
+                                          color: tokens.tx,
+                                        ),
+                                      ),
                                     ],
                                   ),
                                 ),
-                                DataCell(Text(row.provider.category, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: tokens.tx))),
-                                DataCell(Text('—', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: tokens.mut))),
-                                DataCell(Text('—', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: tokens.mut))),
-                                DataCell(Text('—', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: tokens.mut))),
-                                DataCell(StatusBadge(status: row.displayStatus)),
                                 DataCell(
-                                  OutlinedButton(onPressed: null, child: const Text('View')),
+                                  Text(
+                                    row.provider.category,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: tokens.tx,
+                                    ),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    '—',
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: tokens.mut,
+                                    ),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    '—',
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: tokens.mut,
+                                    ),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    '—',
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: tokens.mut,
+                                    ),
+                                  ),
+                                ),
+                                DataCell(
+                                  StatusBadge(status: row.displayStatus),
+                                ),
+                                DataCell(
+                                  OutlinedButton(
+                                    onPressed: null,
+                                    child: const Text('View'),
+                                  ),
                                 ),
                               ],
                             ),
@@ -179,7 +315,11 @@ class _AdminDesktopProvidersState extends State<AdminDesktopProviders> {
 }
 
 class _FilterTab extends StatelessWidget {
-  const _FilterTab({required this.label, required this.selected, required this.onTap});
+  const _FilterTab({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
 
   final String label;
   final bool selected;
@@ -199,10 +339,19 @@ class _FilterTab extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 15),
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            border: Border.all(color: selected ? AppColors.primary : tokens.line),
+            border: Border.all(
+              color: selected ? AppColors.primary : tokens.line,
+            ),
             borderRadius: BorderRadius.circular(9),
           ),
-          child: Text(label, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: selected ? Colors.white : tokens.mut)),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w800,
+              color: selected ? Colors.white : tokens.mut,
+            ),
+          ),
         ),
       ),
     );

@@ -1,5 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
@@ -20,12 +18,8 @@ import 'admin_shell.dart';
 /// screen.
 ///
 /// Sign-in only, deliberately — no self-service admin account creation here.
-/// On success: an account with no role yet, or already `admin`, goes
-/// straight to the desktop dashboard (no role-picker step, since this page
-/// is admin-specific by definition); an account already saved as
-/// `customer`/`provider` is signed back out with a clear message rather
-/// than dumped into a dashboard whose every real data read the deployed
-/// Firestore rules would reject for that role anyway.
+/// On success, only an account already provisioned with the `admin` role can
+/// enter the dashboard. New and non-admin accounts are signed back out.
 class AdminLoginScreen extends StatefulWidget {
   const AdminLoginScreen({super.key});
 
@@ -63,19 +57,6 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
     super.dispose();
   }
 
-  Future<void> _persistAdminRoleBestEffort() async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return;
-      // Best-effort, matching RoleSelectScreen's own `_persistRole` — the
-      // deployed rule only allows this while the account's role is still
-      // null, so it's a silent no-op for anything else.
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).update({'role': 'admin'});
-    } catch (_) {
-      // Best-effort.
-    }
-  }
-
   Future<void> _submit() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text;
@@ -90,17 +71,14 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
     try {
       await AuthService.instance.signIn(email: email, password: password);
       final savedRole = await AuthService.instance.fetchSavedRole();
-      if (savedRole != null && savedRole != UserRole.admin) {
+      if (savedRole != UserRole.admin) {
         await AuthService.instance.signOut();
         throw const AuthException("This account isn't an admin account.");
       }
-      if (savedRole == null) {
-        await _persistAdminRoleBestEffort();
-      }
       if (!mounted) return;
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const AdminShell()),
-      );
+      Navigator.of(
+        context,
+      ).pushReplacement(MaterialPageRoute(builder: (_) => const AdminShell()));
     } on AuthException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -142,17 +120,38 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                       Container(
                         width: 40,
                         height: 40,
-                        decoration: BoxDecoration(color: AppColors.accent, borderRadius: BorderRadius.circular(11)),
+                        decoration: BoxDecoration(
+                          color: AppColors.accent,
+                          borderRadius: BorderRadius.circular(11),
+                        ),
                         alignment: Alignment.center,
-                        child: const Icon(LucideIcons.home, size: 20, color: Color(0xFF0B132B)),
+                        child: const Icon(
+                          LucideIcons.home,
+                          size: 20,
+                          color: Color(0xFF0B132B),
+                        ),
                       ),
                       const SizedBox(width: 12),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text('At Your Service', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: tokens.tx)),
-                          Text('Admin Console', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: tokens.mut)),
+                          Text(
+                            'At Your Service',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                              color: tokens.tx,
+                            ),
+                          ),
+                          Text(
+                            'Admin Console',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: tokens.mut,
+                            ),
+                          ),
                         ],
                       ),
                     ],
@@ -161,13 +160,22 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                   Text(
                     'Admin sign in',
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: -0.4, color: tokens.tx),
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.4,
+                      color: tokens.tx,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     'Operations & management access only.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: tokens.mut),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: tokens.mut,
+                    ),
                   ),
                   const SizedBox(height: 26),
                   _DesktopField(
@@ -187,7 +195,14 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                   ),
                   if (_error != null) ...[
                     const SizedBox(height: 14),
-                    Text(_error!, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.danger)),
+                    Text(
+                      _error!,
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.danger,
+                      ),
+                    ),
                   ],
                   const SizedBox(height: 22),
                   PrimaryCtaButton(
@@ -227,7 +242,14 @@ class _DesktopField extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: tokens.mut)),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: tokens.mut,
+          ),
+        ),
         const SizedBox(height: 7),
         Container(
           height: 46,
@@ -246,12 +268,20 @@ class _DesktopField extends StatelessWidget {
                   controller: controller,
                   obscureText: obscure,
                   keyboardType: keyboardType,
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: tokens.tx),
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: tokens.tx,
+                  ),
                   decoration: InputDecoration(
                     isCollapsed: true,
                     border: InputBorder.none,
                     hintText: hint,
-                    hintStyle: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: tokens.mut),
+                    hintStyle: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: tokens.mut,
+                    ),
                   ),
                 ),
               ),

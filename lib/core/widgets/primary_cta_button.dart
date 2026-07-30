@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../platform/platform_design.dart';
 import '../theme/app_colors.dart';
 
 /// Full-width 54px primary CTA with the design handoff's colored glow shadow
@@ -29,24 +30,34 @@ class PrimaryCtaButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final radius = context.controlRadius;
+    final isCupertino = context.usesCupertinoDesign;
     return Container(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(15),
+        borderRadius: BorderRadius.circular(radius),
         boxShadow: [
           BoxShadow(
-            color: shadowColor.withValues(alpha: shadowAlpha),
-            blurRadius: 26,
-            offset: const Offset(0, 12),
-            spreadRadius: -10,
+            color: shadowColor.withValues(
+              alpha: isCupertino ? shadowAlpha * 0.45 : shadowAlpha,
+            ),
+            blurRadius: isCupertino ? 18 : 26,
+            offset: Offset(0, isCupertino ? 8 : 12),
+            spreadRadius: isCupertino ? -8 : -10,
           ),
         ],
       ),
       child: SizedBox(
         width: double.infinity,
-        height: 54,
+        height: isCupertino ? 50 : 56,
         child: ElevatedButton(
           onPressed: onPressed,
-          style: style,
+          style:
+              style ??
+              ElevatedButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(radius),
+                ),
+              ),
           child: icon == null
               ? Text(label)
               : Row(

@@ -1,6 +1,8 @@
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
+import '../platform/platform_design.dart';
 import 'app_colors.dart';
 import 'app_tokens.dart';
 import 'scr_in_page_transitions.dart';
@@ -16,17 +18,30 @@ abstract final class AppTheme {
     padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
     elevation: 0,
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-    textStyle: const TextStyle(
-      fontSize: 15,
-      fontWeight: FontWeight.w800,
-    ),
+    textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
   );
 
-  static ThemeData light() => _build(Brightness.light, AppTokens.light);
+  static ThemeData light({TargetPlatform? platform}) => _build(
+    Brightness.light,
+    AppTokens.light,
+    platform ?? defaultTargetPlatform,
+  );
 
-  static ThemeData dark() => _build(Brightness.dark, AppTokens.dark);
+  static ThemeData dark({TargetPlatform? platform}) => _build(
+    Brightness.dark,
+    AppTokens.dark,
+    platform ?? defaultTargetPlatform,
+  );
 
-  static ThemeData _build(Brightness brightness, AppTokens tokens) {
+  static ThemeData _build(
+    Brightness brightness,
+    AppTokens tokens,
+    TargetPlatform platform,
+  ) {
+    final designPlatform = PlatformDesign.resolve(platform);
+    final isCupertino = designPlatform == AppDesignPlatform.ios;
+    final controlRadius = isCupertino ? 12.0 : 16.0;
+    final cardRadius = isCupertino ? 16.0 : 20.0;
     final colorScheme = ColorScheme.fromSeed(
       seedColor: AppColors.primary,
       brightness: brightness,
@@ -39,9 +54,10 @@ abstract final class AppTheme {
       outline: tokens.line,
     );
 
-    final base = GoogleFonts.manropeTextTheme(
-      brightness == Brightness.dark ? ThemeData.dark().textTheme : ThemeData.light().textTheme,
-    );
+    final base = (brightness == Brightness.dark
+            ? ThemeData.dark().textTheme
+            : ThemeData.light().textTheme)
+        .apply(fontFamily: 'Manrope');
 
     final textTheme = base.copyWith(
       headlineSmall: base.headlineSmall?.copyWith(
@@ -87,16 +103,37 @@ abstract final class AppTheme {
 
     return ThemeData(
       useMaterial3: true,
+      platform: platform,
       brightness: brightness,
       colorScheme: colorScheme,
       scaffoldBackgroundColor: tokens.bg,
       textTheme: textTheme,
       extensions: [tokens],
+      splashFactory:
+          isCupertino ? NoSplash.splashFactory : InkSparkle.splashFactory,
+      materialTapTargetSize: MaterialTapTargetSize.padded,
+      visualDensity:
+          isCupertino ? VisualDensity.standard : VisualDensity.comfortable,
+      cupertinoOverrideTheme: CupertinoThemeData(
+        brightness: brightness,
+        primaryColor: AppColors.primary,
+        scaffoldBackgroundColor: tokens.bg,
+        barBackgroundColor: tokens.surface,
+        textTheme: CupertinoTextThemeData(
+          primaryColor: tokens.tx,
+          textStyle: textTheme.bodyMedium,
+          actionTextStyle: textTheme.labelLarge?.copyWith(
+            color: AppColors.primary,
+          ),
+          navTitleTextStyle: textTheme.titleMedium,
+          navLargeTitleTextStyle: textTheme.headlineSmall,
+        ),
+      ),
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
-          TargetPlatform.android: ScrInPageTransitionsBuilder(),
-          TargetPlatform.iOS: ScrInPageTransitionsBuilder(),
-          TargetPlatform.macOS: ScrInPageTransitionsBuilder(),
+          TargetPlatform.android: ZoomPageTransitionsBuilder(),
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
           TargetPlatform.linux: ScrInPageTransitionsBuilder(),
           TargetPlatform.windows: ScrInPageTransitionsBuilder(),
           TargetPlatform.fuchsia: ScrInPageTransitionsBuilder(),
@@ -106,7 +143,10 @@ abstract final class AppTheme {
         backgroundColor: tokens.bg,
         foregroundColor: tokens.tx,
         elevation: 0,
-        centerTitle: false,
+        centerTitle: isCupertino,
+        toolbarHeight: isCupertino ? 44 : 64,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
         titleTextStyle: textTheme.titleLarge,
       ),
       cardTheme: CardThemeData(
@@ -114,11 +154,15 @@ abstract final class AppTheme {
         color: tokens.card,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
-          side: BorderSide(color: tokens.line),
+          borderRadius: BorderRadius.circular(cardRadius),
+          side: BorderSide(color: tokens.line, width: isCupertino ? 0.75 : 1),
         ),
       ),
-      dividerTheme: DividerThemeData(color: tokens.line, thickness: 1, space: 1),
+      dividerTheme: DividerThemeData(
+        color: tokens.line,
+        thickness: 1,
+        space: 1,
+      ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primary,
@@ -126,8 +170,12 @@ abstract final class AppTheme {
           disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.4),
           padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
           elevation: 0,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-          textStyle: textTheme.labelLarge?.copyWith(color: AppColors.textOnPrimary),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(controlRadius),
+          ),
+          textStyle: textTheme.labelLarge?.copyWith(
+            color: AppColors.textOnPrimary,
+          ),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
@@ -135,7 +183,9 @@ abstract final class AppTheme {
           foregroundColor: tokens.tx,
           side: BorderSide(color: tokens.line),
           padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(controlRadius),
+          ),
           textStyle: textTheme.labelLarge,
         ),
       ),
@@ -150,23 +200,63 @@ abstract final class AppTheme {
         side: BorderSide(color: tokens.line),
         labelStyle: textTheme.labelMedium,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(100)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(isCupertino ? 10 : 100),
+        ),
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        height: 72,
+        backgroundColor: tokens.surface,
+        indicatorColor: AppColors.primary.withValues(alpha: 0.16),
+        iconTheme: WidgetStateProperty.resolveWith(
+          (states) => IconThemeData(
+            size: 22,
+            color:
+                states.contains(WidgetState.selected)
+                    ? AppColors.primary
+                    : tokens.mut,
+          ),
+        ),
+        labelTextStyle: WidgetStateProperty.resolveWith(
+          (states) => TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color:
+                states.contains(WidgetState.selected)
+                    ? AppColors.primary
+                    : tokens.mut,
+          ),
+        ),
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: tokens.surface,
+        surfaceTintColor: Colors.transparent,
+        showDragHandle: !isCupertino,
+        dragHandleColor: tokens.mut.withValues(alpha: 0.45),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(isCupertino ? 18 : 28),
+          ),
+        ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: tokens.card,
         hintStyle: textTheme.bodyMedium,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 14,
+        ),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(controlRadius),
           borderSide: BorderSide(color: tokens.line),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(controlRadius),
           borderSide: BorderSide(color: tokens.line),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(controlRadius),
           borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
         ),
       ),

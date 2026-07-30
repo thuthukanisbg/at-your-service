@@ -1,13 +1,32 @@
 const _months = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
 ];
 
 /// Formats a booking's `scheduledFor` DateTime as e.g. "9 Jun · 12:00 PM".
 String formatSchedule(DateTime dt) {
+  return '${formatScheduleDate(dt)} · ${formatScheduleTime(dt)}';
+}
+
+String formatScheduleDate(DateTime dt) {
+  return '${dt.day} ${_months[dt.month - 1]} ${dt.year}';
+}
+
+String formatScheduleTime(DateTime dt) {
   final hour12 = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
   final period = dt.hour < 12 ? 'AM' : 'PM';
   final minute = dt.minute.toString().padLeft(2, '0');
-  return '${dt.day} ${_months[dt.month - 1]} · $hour12:$minute $period';
+  return '$hour12:$minute $period';
 }
 
 /// price/basePrice fields are strings in most existing Firestore docs but a

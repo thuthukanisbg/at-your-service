@@ -15,9 +15,14 @@ Color adminStatusColor(String status, BuildContext context) {
   const red = AppColors.danger;
   return switch (status) {
     'Completed' || 'Verified' || 'Active' || 'Resolved' || 'Success' => green,
-    'In Progress' || 'Confirmed' => blue,
+    'Accepted' || 'En Route' || 'In Progress' || 'Confirmed' => blue,
     'Pending' || 'Open' || 'Invited' => amber,
-    'Cancelled' || 'Suspended' || 'Escalated' || 'Failed' || 'Inactive' || 'Expired' => red,
+    'Cancelled' ||
+    'Suspended' ||
+    'Escalated' ||
+    'Failed' ||
+    'Inactive' ||
+    'Expired' => red,
     'Paused' => context.tokens.mut,
     _ => context.tokens.mut,
   };
@@ -39,7 +44,14 @@ class StatusBadge extends StatelessWidget {
         color: isNeutral ? tokens.elev : color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(999),
       ),
-      child: Text(status, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: color)),
+      child: Text(
+        status,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          color: color,
+        ),
+      ),
     );
   }
 }

@@ -30,18 +30,47 @@ Future<List<CustomerBookingSummary>> fetchMyBookings() async {
   if (uid == null) return [];
 
   final snapshot =
-      await FirebaseFirestore.instance.collection('bookings').where('customerId', isEqualTo: uid).get();
+      await FirebaseFirestore.instance
+          .collection('bookings')
+          .where('customerId', isEqualTo: uid)
+          .get();
 
-  return snapshot.docs.map((doc) {
-    final data = doc.data();
-    final scheduledFor = data['scheduledFor'];
-    return CustomerBookingSummary(
-      id: doc.id,
-      serviceName: data['serviceName'] as String? ?? 'Service',
-      price: parsePrice(data['price']),
-      status: data['status'] as String? ?? 'pending',
-      scheduleLabel: scheduledFor is Timestamp ? formatSchedule(scheduledFor.toDate()) : '—',
-      providerId: data['providerId'] as String?,
-    );
-  }).toList();
+  return _summaries(snapshot.docs);
+}
+
+/// Live booking feed used by Customer so provider assignment, travel, work,
+/// and completion changes appear without leaving and reopening the tab.
+Stream<List<CustomerBookingSummary>> watchMyBookings() {
+  try {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return Stream.value(const []);
+    return FirebaseFirestore.instance
+        .collection('bookings')
+        .where('customerId', isEqualTo: uid)
+        .snapshots()
+        .map((snapshot) => _summaries(snapshot.docs));
+  } catch (error, stack) {
+    return Stream.error(error, stack);
+  }
+}
+
+List<CustomerBookingSummary> _summaries(
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+) {
+  return docs.map((doc) {
+      final data = doc.data();
+      final scheduledFor = data['scheduledFor'];
+      return CustomerBookingSummary(
+        id: doc.id,
+        serviceName: data['serviceName'] as String? ?? 'Service',
+        price: parsePrice(data['price']),
+        status: data['status'] as String? ?? 'pending',
+        scheduleLabel:
+            scheduledFor is Timestamp
+                ? formatSchedule(scheduledFor.toDate())
+                : '—',
+        providerId: data['providerId'] as String?,
+      );
+    }).toList()
+    ..sort((a, b) => b.scheduleLabel.compareTo(a.scheduleLabel));
 }

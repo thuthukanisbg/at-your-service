@@ -8,18 +8,33 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(uid())).data.role;
     }
     function isAdmin() { return isSignedIn() && myRole() == 'admin'; }
-    function isProvider() { return isSignedIn() && myRole() == 'provider'; }
+    function isProvider() {
+      return isSignedIn()
+        && myRole() == 'provider'
+        && exists(/databases/$(database)/documents/providers/$(uid()))
+        && get(/databases/$(database)/documents/providers/$(uid())).data.status == 'active';
+    }
 
     match /users/{userId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && uid() == userId;
+      // Public sign-up creates its own role-null or Google-customer profile. An existing
+      // admin may also provision a customer/provider profile for an account
+      // created through the admin console's isolated Auth session.
+      allow create: if isSignedIn()
+        && ((uid() == userId
+                && (request.resource.data.role == null
+                    || request.resource.data.role == 'customer'))
+            || (isAdmin()
+                && request.resource.data.role in ['customer', 'provider']));
       // Own-profile edits: role may be set once (sign-up stores it as null,
-      // the role chooser fills it in) but never changed afterwards; the
+      // the role chooser fills it in) to customer/provider only, but never
+      // self-promoted to admin or changed afterwards; the
       // backend-owned parts of providerProfile (stats, verification) change
       // only via admin action or Cloud Functions.
       allow update: if isSignedIn() && uid() == userId
         && (request.resource.data.role == resource.data.role
-            || resource.data.role == null)
+            || (resource.data.role == null
+                && request.resource.data.role in ['customer', 'provider']))
         && request.resource.data.get(['providerProfile', 'stats'], null)
              == resource.data.get(['providerProfile', 'stats'], null)
         && request.resource.data.get(['providerProfile', 'verification'], null)
@@ -42,7 +57,8 @@ service cloud.firestore {
       allow read: if isSignedIn()
         && (resource.data.customerId == uid()
             || resource.data.get('providerId', null) == uid()
-            // Any provider may browse unclaimed, still-open jobs — confirmed
+            // Any active, approved provider may browse unclaimed, still-open
+            // jobs — confirmed
             // against live data that every 'pending' booking has providerId
             // null and every 'completed' one has it set, so this pairing is
             // the real "available job" definition, not just today's data
@@ -54,14 +70,9 @@ service cloud.firestore {
       allow update: if isSignedIn()
         && resource.data.customerId == uid()
         && request.resource.data.status == 'cancelled';
-      // A provider may update a job assigned to them, or claim an
-      // unassigned one. TODO before real traffic: this claim is a plain
-      // rule check, not a transaction — two providers can race each other;
-      // move the claim into a Cloud Function/transaction.
-      allow update: if isProvider()
-        && (resource.data.get('providerId', null) == uid()
-            || (resource.data.get('providerId', null) == null
-                && request.resource.data.providerId == uid()));
+      // Provider claims and lifecycle changes run through transactional
+      // callable functions. Direct client updates stay blocked so a provider
+      // cannot skip stages or alter booking/customer/payment fields.
       allow update: if isAdmin();
     }
 
@@ -168,22 +179,68 @@ service cloud.firestore {
       }
 
       allow read: if isSignedIn() && (resource.data.customerId == uid() || resource.data.providerId == uid() || isAdmin());
-      allow create: if isSignedIn() && (request.resource.data.customerId == uid() || request.resource.data.providerId == uid());
-      // Only a participant may update, and only their own identity fields
-      // (bookingId/customerId) stay fixed — lastMessage* is meant to
-      // change on every send. providerId is the one exception: a job can
-      // be messaged by more than one interested provider before it's
-      // accepted (see "Message Customer" on an unclaimed job), so while
-      // the underlying booking is still unclaimed, a different signed-in
-      // provider may take over as the conversation's providerId; once the
-      // booking has a real provider assigned, only that provider (or the
-      // customer) may continue touching it.
+      allow create: if isSignedIn()
+        && request.resource.data.keys().hasOnly([
+          'bookingId', 'customerId', 'providerId', 'serviceName',
+          'lastMessageText', 'lastMessageAt', 'lastSenderId',
+          'customerReadAt', 'providerReadAt'
+        ])
+        && request.resource.data.bookingId == conversationId
+        && request.resource.data.customerId == booking().customerId
+        && request.resource.data.providerId == booking().providerId
+        && booking().providerId != null
+        && (booking().customerId == uid() || booking().providerId == uid())
+        && request.resource.data.lastSenderId == uid()
+        && request.resource.data.lastMessageText is string
+        && request.resource.data.lastMessageText.size() > 0
+        && request.resource.data.lastMessageText.size() <= 2000;
+      // Conversations are available only after assignment. Participant IDs
+      // are immutable, senders can update message-summary fields, and each
+      // participant may update only their own read receipt.
       allow update: if isSignedIn()
-        && (resource.data.customerId == uid() || resource.data.providerId == uid()
-          || (booking().providerId == null && request.resource.data.providerId == uid()))
+        && (resource.data.customerId == uid() || resource.data.providerId == uid())
         && request.resource.data.bookingId == resource.data.bookingId
         && request.resource.data.customerId == resource.data.customerId
-        && (request.resource.data.providerId == resource.data.providerId || booking().providerId == null);
+        && request.resource.data.providerId == resource.data.providerId
+        && request.resource.data.serviceName == resource.data.serviceName
+        && (
+          (
+            request.resource.data.diff(resource.data).affectedKeys()
+              .hasAny(['lastMessageText', 'lastMessageAt', 'lastSenderId'])
+            && (
+              (
+                resource.data.customerId == uid()
+                && request.resource.data.diff(resource.data).affectedKeys()
+                  .hasOnly([
+                    'lastMessageText', 'lastMessageAt', 'lastSenderId',
+                    'customerReadAt'
+                  ])
+              )
+              || (
+                resource.data.providerId == uid()
+                && request.resource.data.diff(resource.data).affectedKeys()
+                  .hasOnly([
+                    'lastMessageText', 'lastMessageAt', 'lastSenderId',
+                    'providerReadAt'
+                  ])
+              )
+            )
+            && request.resource.data.lastSenderId == uid()
+            && request.resource.data.lastMessageText is string
+            && request.resource.data.lastMessageText.size() > 0
+            && request.resource.data.lastMessageText.size() <= 2000
+          )
+          || (
+            resource.data.customerId == uid()
+            && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['customerReadAt'])
+          )
+          || (
+            resource.data.providerId == uid()
+            && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['providerReadAt'])
+          )
+        );
 
       match /messages/{messageId} {
         function conversationExists() {
@@ -201,7 +258,12 @@ service cloud.firestore {
         // has never been created.
         allow read: if isSignedIn() && (!conversationExists() || conversation().customerId == uid() || conversation().providerId == uid() || isAdmin());
         allow create: if isSignedIn() && request.resource.data.senderId == uid()
-          && conversationExists() && (conversation().customerId == uid() || conversation().providerId == uid());
+          && conversationExists()
+          && (conversation().customerId == uid() || conversation().providerId == uid())
+          && request.resource.data.keys().hasOnly(['senderId', 'text', 'createdAt'])
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() <= 2000;
         // Messages are immutable once sent.
         allow update, delete: if false;
       }

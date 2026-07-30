@@ -1,0 +1,75 @@
+name: Mobile CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality-and-android:
+    name: Quality and Android
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.32.8
+          cache: true
+
+      - name: Resolve packages
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+      - name: Build Android APK
+        run: flutter build apk --debug
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v6
+        with:
+          name: at-your-service-android-debug
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+
+  ios:
+    name: iOS
+    runs-on: macos-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.32.8
+          cache: true
+
+      - name: Resolve packages
+        run: flutter pub get
+
+      - name: Build iOS app without signing
+        run: flutter build ios --debug --no-codesign
+
+      - name: Upload iOS app
+        uses: actions/upload-artifact@v6
+        with:
+          name: at-your-service-ios-debug
+          path: build/ios/iphoneos/Runner.app
+          if-no-files-found: error

@@ -20,10 +20,10 @@ class _TrackStep {
   final _StepState state;
 
   IconData get icon => switch (state) {
-        _StepState.done => LucideIcons.check,
-        _StepState.active => LucideIcons.navigation,
-        _StepState.idle => LucideIcons.clock,
-      };
+    _StepState.done => LucideIcons.check,
+    _StepState.active => LucideIcons.navigation,
+    _StepState.idle => LucideIcons.clock,
+  };
 }
 
 const _trackSteps = [
@@ -45,26 +45,20 @@ class TrackBookingScreen extends StatelessWidget {
 
   static const routeName = '/customer/track';
 
-  /// Only set when reached from a real booking (see `CustomerBookingsScreen`
-  /// — tapping a booking with an assigned provider). The mock flow reached
-  /// via ReviewPayScreen's "Confirm & Pay" never creates a real Firestore
-  /// booking, so these stay null there and this screen behaves exactly as
-  /// before: fully decorative demo, Chat still shows the coming-soon
-  /// snackbar since there's no real booking to attach a conversation to.
+  /// Set when reached from a stored booking (see `CustomerBookingsScreen`
+  /// or `ReviewPayScreen`). A booking may still be waiting for a provider,
+  /// in which case [providerId] remains null and provider-specific actions
+  /// stay unavailable.
   final String? bookingId;
   final String? customerId;
   final String? providerId;
   final String? serviceName;
   final String? otherPartyName;
 
-  bool get _hasRealBooking => bookingId != null && customerId != null && providerId != null;
-
-  /// True for any real booking (assigned or not) — as opposed to the pure
-  /// demo entry point via ReviewPayScreen's mock "Confirm & Pay", where
-  /// bookingId is null. Used to swap the fake live-map/4-step timeline for
-  /// an honest 2-step one: there's no real live-location data behind this
-  /// screen, so pretending a provider is "on the way" for a booking that
-  /// might not even be assigned yet would be actively misleading.
+  /// True for any stored booking (assigned or not), as opposed to the
+  /// parameterless preview/demo entry point. Used to swap the decorative
+  /// live-map timeline for an honest two-step state: there is no real
+  /// live-location data behind this screen yet.
   bool get _isRealBooking => bookingId != null;
 
   void _comingSoon(BuildContext context, String what) {
@@ -73,20 +67,31 @@ class TrackBookingScreen extends StatelessWidget {
     );
   }
 
-  Future<void> _callProvider(BuildContext context) async {
-    if (!_hasRealBooking) {
+  Future<void> _callProvider(
+    BuildContext context,
+    String? effectiveProviderId,
+  ) async {
+    if (bookingId == null ||
+        customerId == null ||
+        effectiveProviderId == null) {
       _comingSoon(context, 'Calling');
       return;
     }
     // No providers in the live data have a phone number on file yet (it's
     // never collected during onboarding) — fetched lazily on tap rather
     // than eagerly for every screen load, since it's only needed here.
-    final doc = await FirebaseFirestore.instance.collection('users').doc(providerId).get();
+    final doc =
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(effectiveProviderId)
+            .get();
     final phone = doc.data()?['phoneNumber'] as String?;
     if (!context.mounted) return;
     if (phone == null || phone.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No phone number on file for this provider yet.')),
+        const SnackBar(
+          content: Text('No phone number on file for this provider yet.'),
+        ),
       );
       return;
     }
@@ -98,44 +103,99 @@ class TrackBookingScreen extends StatelessWidget {
     }
   }
 
-  void _reportProblem(BuildContext context) {
+  void _reportProblem(BuildContext context, String? effectiveProviderId) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => FileDisputeScreen(
-          bookingId: bookingId!,
-          customerId: customerId!,
-          providerId: providerId,
-          serviceName: serviceName ?? 'Service',
-        ),
+        builder:
+            (_) => FileDisputeScreen(
+              bookingId: bookingId!,
+              customerId: customerId!,
+              providerId: effectiveProviderId,
+              serviceName: serviceName ?? 'Service',
+            ),
       ),
     );
   }
 
-  void _openChat(BuildContext context) {
-    if (!_hasRealBooking) {
+  void _openChat(BuildContext context, String? effectiveProviderId) {
+    if (bookingId == null ||
+        customerId == null ||
+        effectiveProviderId == null) {
       _comingSoon(context, 'Chat');
       return;
     }
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => ConversationScreen(
-          bookingId: bookingId!,
-          customerId: customerId!,
-          providerId: providerId!,
-          serviceName: serviceName ?? 'Service',
-          otherPartyName: otherPartyName ?? 'Your provider',
-        ),
+        builder:
+            (_) => ConversationScreen(
+              bookingId: bookingId!,
+              customerId: customerId!,
+              providerId: effectiveProviderId,
+              serviceName: serviceName ?? 'Service',
+              otherPartyName: otherPartyName ?? 'Your provider',
+            ),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    if (!_isRealBooking) {
+      return _buildScreen(
+        context,
+        effectiveProviderId: providerId,
+        status: 'preview',
+      );
+    }
+    try {
+      return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+        stream:
+            FirebaseFirestore.instance
+                .collection('bookings')
+                .doc(bookingId)
+                .snapshots(),
+        builder: (context, snapshot) {
+          final data = snapshot.data?.data();
+          return _buildScreen(
+            context,
+            effectiveProviderId: data?['providerId'] as String? ?? providerId,
+            status: data?['status'] as String? ?? 'pending',
+          );
+        },
+      );
+    } catch (_) {
+      return _buildScreen(
+        context,
+        effectiveProviderId: providerId,
+        status: 'pending',
+      );
+    }
+  }
+
+  Widget _buildScreen(
+    BuildContext context, {
+    required String? effectiveProviderId,
+    required String status,
+  }) {
     final tokens = context.tokens;
-    final displayName = otherPartyName ?? 'Sipho M.';
-    final initials = displayName.trim().isEmpty
-        ? '?'
-        : displayName.trim().split(RegExp(r'\s+')).map((p) => p[0]).take(2).join().toUpperCase();
+    final hasAssignedBooking =
+        bookingId != null && customerId != null && effectiveProviderId != null;
+    final isEnRoute = status == 'en_route';
+    final isInProgress = status == 'in_progress';
+    final isCompleted = status == 'completed';
+    final displayName =
+        otherPartyName ??
+        (effectiveProviderId != null ? 'Assigned provider' : 'Sipho M.');
+    final initials =
+        displayName.trim().isEmpty
+            ? '?'
+            : displayName
+                .trim()
+                .split(RegExp(r'\s+'))
+                .map((p) => p[0])
+                .take(2)
+                .join()
+                .toUpperCase();
     return Scaffold(
       body: SafeArea(
         child: ListView(
@@ -151,19 +211,31 @@ class TrackBookingScreen extends StatelessWidget {
                   child: Stack(
                     children: [
                       Positioned.fill(
-                        child: CustomPaint(painter: DiagonalStripesPainter(chip: tokens.chip, elev: tokens.elev)),
+                        child: CustomPaint(
+                          painter: DiagonalStripesPainter(
+                            chip: tokens.chip,
+                            elev: tokens.elev,
+                          ),
+                        ),
                       ),
                       Center(
                         child: Text(
                           '[ live map ]',
-                          style: TextStyle(fontFamily: 'monospace', fontSize: 11, color: tokens.mut),
+                          style: TextStyle(
+                            fontFamily: 'monospace',
+                            fontSize: 11,
+                            color: tokens.mut,
+                          ),
                         ),
                       ),
                       Positioned(
                         top: 14,
                         left: 14,
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 11,
+                            vertical: 7,
+                          ),
                           decoration: BoxDecoration(
                             color: tokens.surface,
                             border: Border.all(color: tokens.line),
@@ -177,13 +249,20 @@ class TrackBookingScreen extends StatelessWidget {
                                 child: Container(
                                   width: 8,
                                   height: 8,
-                                  decoration: const BoxDecoration(color: AppColors.success, shape: BoxShape.circle),
+                                  decoration: const BoxDecoration(
+                                    color: AppColors.success,
+                                    shape: BoxShape.circle,
+                                  ),
                                 ),
                               ),
                               const SizedBox(width: 7),
                               Text(
                                 'Pro on the way · 12 min',
-                                style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: tokens.tx),
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: tokens.tx,
+                                ),
                               ),
                             ],
                           ),
@@ -195,7 +274,7 @@ class TrackBookingScreen extends StatelessWidget {
               ),
               const SizedBox(height: 14),
             ],
-            if (!_isRealBooking || providerId != null)
+            if (!_isRealBooking || effectiveProviderId != null)
               Container(
                 padding: const EdgeInsets.all(15),
                 margin: const EdgeInsets.only(bottom: 16),
@@ -209,31 +288,69 @@ class TrackBookingScreen extends StatelessWidget {
                     Container(
                       width: 48,
                       height: 48,
-                      decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
+                      decoration: const BoxDecoration(
+                        color: AppColors.primary,
+                        shape: BoxShape.circle,
+                      ),
                       alignment: Alignment.center,
-                      child: Text(initials, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white)),
+                      child: Text(
+                        initials,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                        ),
+                      ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(displayName, style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800, color: tokens.tx)),
                           Text(
-                            'Cleaning Specialist · ⭐ 4.9',
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: tokens.mut),
+                            displayName,
+                            style: TextStyle(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w800,
+                              color: tokens.tx,
+                            ),
+                          ),
+                          Text(
+                            _isRealBooking
+                                ? 'Service provider'
+                                : 'Cleaning Specialist · ⭐ 4.9',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: tokens.mut,
+                            ),
                           ),
                         ],
                       ),
                     ),
                     const SizedBox(width: 12),
-                    _CircleIconButton(icon: LucideIcons.phone, onTap: () { _callProvider(context); }),
+                    _CircleIconButton(
+                      icon: LucideIcons.phone,
+                      onTap: () {
+                        _callProvider(context, effectiveProviderId);
+                      },
+                    ),
                     const SizedBox(width: 12),
-                    _CircleIconButton(icon: LucideIcons.messageCircle, onTap: () => _openChat(context)),
+                    _CircleIconButton(
+                      icon: LucideIcons.messageCircle,
+                      onTap: () => _openChat(context, effectiveProviderId),
+                    ),
                   ],
                 ),
               ),
-            Text('Booking status', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: tokens.tx)),
+            Text(
+              'Booking status',
+              style: TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w800,
+                color: tokens.tx,
+              ),
+            ),
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.fromLTRB(18, 6, 18, 10),
@@ -244,36 +361,80 @@ class TrackBookingScreen extends StatelessWidget {
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Column(
-                children: _isRealBooking
-                    ? [
-                        // Real bookings only ever have two known statuses
-                        // ('pending'/'completed') and no live-location data —
-                        // showing the demo's granular "on the way" steps here
-                        // would be fabricated, so this is an honest 2-step
-                        // version instead.
-                        _TrackStepRow(
-                          step: const _TrackStep('Booking confirmed', '', _StepState.done),
-                          isLast: false,
-                        ),
-                        _TrackStepRow(
-                          step: _TrackStep(
-                            providerId != null ? 'Provider assigned · $displayName' : 'Waiting for a provider',
-                            '',
-                            providerId != null ? _StepState.done : _StepState.idle,
+                children:
+                    _isRealBooking
+                        ? [
+                          _TrackStepRow(
+                            step: const _TrackStep(
+                              'Booking confirmed',
+                              '',
+                              _StepState.done,
+                            ),
+                            isLast: false,
                           ),
-                          isLast: true,
-                        ),
-                      ]
-                    : [
-                        for (var i = 0; i < _trackSteps.length; i++)
-                          _TrackStepRow(step: _trackSteps[i], isLast: i == _trackSteps.length - 1),
-                      ],
+                          _TrackStepRow(
+                            step: _TrackStep(
+                              effectiveProviderId != null
+                                  ? 'Provider assigned · $displayName'
+                                  : 'Waiting for a provider',
+                              '',
+                              effectiveProviderId != null
+                                  ? _StepState.done
+                                  : _StepState.idle,
+                            ),
+                            isLast: false,
+                          ),
+                          _TrackStepRow(
+                            step: _TrackStep(
+                              'Provider travelling to your site',
+                              '',
+                              isEnRoute
+                                  ? _StepState.active
+                                  : (isInProgress || isCompleted)
+                                  ? _StepState.done
+                                  : _StepState.idle,
+                            ),
+                            isLast: false,
+                          ),
+                          _TrackStepRow(
+                            step: _TrackStep(
+                              'Service in progress',
+                              '',
+                              isInProgress
+                                  ? _StepState.active
+                                  : isCompleted
+                                  ? _StepState.done
+                                  : _StepState.idle,
+                            ),
+                            isLast: false,
+                          ),
+                          _TrackStepRow(
+                            step: _TrackStep(
+                              'Service completed',
+                              '',
+                              isCompleted ? _StepState.done : _StepState.idle,
+                            ),
+                            isLast: true,
+                          ),
+                        ]
+                        : [
+                          for (var i = 0; i < _trackSteps.length; i++)
+                            _TrackStepRow(
+                              step: _trackSteps[i],
+                              isLast: i == _trackSteps.length - 1,
+                            ),
+                        ],
               ),
             ),
             InkWell(
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const RateReviewScreen()),
-              ),
+              onTap:
+                  !_isRealBooking || isCompleted
+                      ? () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const RateReviewScreen(),
+                        ),
+                      )
+                      : null,
               borderRadius: BorderRadius.circular(14),
               child: Container(
                 width: double.infinity,
@@ -285,19 +446,33 @@ class TrackBookingScreen extends StatelessWidget {
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Text(
-                  'Mark as complete & rate',
-                  style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800, color: tokens.tx),
+                  _isRealBooking
+                      ? isCompleted
+                          ? 'Rate completed service'
+                          : 'Available after job completion'
+                      : 'Mark as complete & rate',
+                  style: TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w800,
+                    color:
+                        !_isRealBooking || isCompleted ? tokens.tx : tokens.mut,
+                  ),
                 ),
               ),
             ),
-            if (_hasRealBooking)
+            if (hasAssignedBooking)
               Padding(
                 padding: const EdgeInsets.only(top: 12),
                 child: TextButton.icon(
-                  onPressed: () => _reportProblem(context),
-                  style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+                  onPressed: () => _reportProblem(context, effectiveProviderId),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.danger,
+                  ),
                   icon: const Icon(LucideIcons.flag, size: 16),
-                  label: const Text('Report a problem', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                  label: const Text(
+                    'Report a problem',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                  ),
                 ),
               ),
           ],
@@ -321,7 +496,10 @@ class _CircleIconButton extends StatelessWidget {
       child: Container(
         width: 40,
         height: 40,
-        decoration: BoxDecoration(color: const Color(0x242E7DFF), borderRadius: BorderRadius.circular(11)),
+        decoration: BoxDecoration(
+          color: const Color(0x242E7DFF),
+          borderRadius: BorderRadius.circular(11),
+        ),
         child: Icon(icon, size: 18, color: AppColors.primary),
       ),
     );
@@ -342,9 +520,12 @@ class _TrackStepRow extends StatelessWidget {
       _StepState.active => AppColors.primary,
       _StepState.idle => tokens.chip,
     };
-    final Color iconColor = step.state == _StepState.idle ? tokens.mut : Colors.white;
-    final Color lineColor = step.state == _StepState.done ? AppColors.success : tokens.line;
-    final Color titleColor = step.state == _StepState.idle ? tokens.mut : tokens.tx;
+    final Color iconColor =
+        step.state == _StepState.idle ? tokens.mut : Colors.white;
+    final Color lineColor =
+        step.state == _StepState.done ? AppColors.success : tokens.line;
+    final Color titleColor =
+        step.state == _StepState.idle ? tokens.mut : tokens.tx;
 
     final dot = Container(
       width: 28,
@@ -360,7 +541,10 @@ class _TrackStepRow extends StatelessWidget {
           Column(
             children: [
               step.state == _StepState.active
-                  ? _PulsingOpacity(duration: const Duration(milliseconds: 1600), child: dot)
+                  ? _PulsingOpacity(
+                    duration: const Duration(milliseconds: 1600),
+                    child: dot,
+                  )
                   : dot,
               if (!isLast)
                 Expanded(
@@ -379,8 +563,22 @@ class _TrackStepRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(step.title, style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: titleColor)),
-                  Text(step.time, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w500, color: tokens.mut)),
+                  Text(
+                    step.title,
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w700,
+                      color: titleColor,
+                    ),
+                  ),
+                  Text(
+                    step.time,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w500,
+                      color: tokens.mut,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -403,13 +601,15 @@ class _PulsingOpacity extends StatefulWidget {
   State<_PulsingOpacity> createState() => _PulsingOpacityState();
 }
 
-class _PulsingOpacityState extends State<_PulsingOpacity> with SingleTickerProviderStateMixin {
+class _PulsingOpacityState extends State<_PulsingOpacity>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: widget.duration)..repeat(reverse: true);
+    _controller = AnimationController(vsync: this, duration: widget.duration)
+      ..repeat(reverse: true);
   }
 
   @override
@@ -421,7 +621,10 @@ class _PulsingOpacityState extends State<_PulsingOpacity> with SingleTickerProvi
   @override
   Widget build(BuildContext context) {
     return FadeTransition(
-      opacity: Tween<double>(begin: 1, end: 0.35).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut)),
+      opacity: Tween<double>(
+        begin: 1,
+        end: 0.35,
+      ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut)),
       child: widget.child,
     );
   }

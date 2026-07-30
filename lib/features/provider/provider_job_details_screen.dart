@@ -12,12 +12,17 @@ import '../../core/widgets/primary_cta_button.dart';
 import '../../models/provider_job.dart';
 import '../disputes/file_dispute_screen.dart';
 import '../messaging/conversation_screen.dart';
+import 'provider_in_progress_screen.dart';
 import 'provider_jobs_service.dart';
 import 'provider_mock_data.dart';
 import 'provider_navigate_screen.dart';
 
 class ProviderJobDetailsScreen extends StatefulWidget {
-  const ProviderJobDetailsScreen({super.key, required this.job, this.isAlreadyAccepted = false});
+  const ProviderJobDetailsScreen({
+    super.key,
+    required this.job,
+    this.isAlreadyAccepted = false,
+  });
 
   final ProviderJob job;
 
@@ -27,42 +32,139 @@ class ProviderJobDetailsScreen extends StatefulWidget {
   final bool isAlreadyAccepted;
 
   @override
-  State<ProviderJobDetailsScreen> createState() => _ProviderJobDetailsScreenState();
+  State<ProviderJobDetailsScreen> createState() =>
+      _ProviderJobDetailsScreenState();
 }
 
 class _ProviderJobDetailsScreenState extends State<ProviderJobDetailsScreen> {
-  bool _claiming = false;
+  bool _working = false;
+  late bool _accepted;
+  late String _status;
   ProviderJob get job => widget.job;
+
+  @override
+  void initState() {
+    super.initState();
+    _accepted = widget.isAlreadyAccepted || job.status != 'pending';
+    _status =
+        widget.isAlreadyAccepted && job.status == 'pending'
+            ? 'accepted'
+            : job.status;
+  }
+
+  @override
+  void didUpdateWidget(covariant ProviderJobDetailsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.job != widget.job ||
+        oldWidget.isAlreadyAccepted != widget.isAlreadyAccepted) {
+      _accepted = widget.isAlreadyAccepted || job.status != 'pending';
+      _status =
+          widget.isAlreadyAccepted && job.status == 'pending'
+              ? 'accepted'
+              : job.status;
+    }
+  }
 
   // Resolved once and reused by both the "Customer" info row and the
   // "Message Customer" button, rather than fetching the same doc twice.
   late final Future<String?> _customerNameFuture =
-      job.customerId != null ? fetchUserDisplayName(job.customerId!) : Future.value(null);
+      job.customerId != null
+          ? fetchUserDisplayName(job.customerId!)
+          : Future.value(null);
 
   Future<void> _acceptJob() async {
-    if (widget.isAlreadyAccepted || job.id == null) {
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const ProviderNavigateScreen()),
-      );
+    if (job.id == null) {
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const ProviderNavigateScreen()));
       return;
     }
-    setState(() => _claiming = true);
+    setState(() => _working = true);
     try {
       await claimJob(job.id!);
       if (!mounted) return;
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const ProviderNavigateScreen()),
+      setState(() {
+        _accepted = true;
+        _status = 'accepted';
+        _working = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Job accepted. You can message the customer before travelling.',
+          ),
+        ),
       );
     } on ClaimException catch (e) {
       if (!mounted) return;
-      setState(() => _claiming = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      setState(() => _working = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     } catch (_) {
       if (!mounted) return;
-      setState(() => _claiming = false);
+      setState(() => _working = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Couldn't accept this job — please try again.")),
+        const SnackBar(
+          content: Text("Couldn't accept this job — please try again."),
+        ),
       );
+    }
+  }
+
+  Future<void> _startTravel() async {
+    final bookingId = job.id;
+    if (bookingId == null) {
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const ProviderNavigateScreen()));
+      return;
+    }
+    if (_status == 'in_progress') {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder:
+              (_) => ProviderInProgressScreen(
+                job: job.copyWith(status: 'in_progress'),
+              ),
+        ),
+      );
+      return;
+    }
+    if (_status == 'en_route') {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder:
+              (_) =>
+                  ProviderNavigateScreen(job: job.copyWith(status: 'en_route')),
+        ),
+      );
+      return;
+    }
+    setState(() => _working = true);
+    try {
+      await ProviderJobLifecycleService.instance.updateStatus(
+        bookingId,
+        'en_route',
+      );
+      if (!mounted) return;
+      setState(() {
+        _status = 'en_route';
+        _working = false;
+      });
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder:
+              (_) =>
+                  ProviderNavigateScreen(job: job.copyWith(status: 'en_route')),
+        ),
+      );
+    } on JobStatusException catch (error) {
+      if (!mounted) return;
+      setState(() => _working = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
     }
   }
 
@@ -75,13 +177,14 @@ class _ProviderJobDetailsScreenState extends State<ProviderJobDetailsScreen> {
     if (!mounted) return;
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => ConversationScreen(
-          bookingId: bookingId,
-          customerId: customerId,
-          providerId: providerId,
-          serviceName: job.title,
-          otherPartyName: otherPartyName,
-        ),
+        builder:
+            (_) => ConversationScreen(
+              bookingId: bookingId,
+              customerId: customerId,
+              providerId: providerId,
+              serviceName: job.title,
+              otherPartyName: otherPartyName,
+            ),
       ),
     );
   }
@@ -101,28 +204,39 @@ class _ProviderJobDetailsScreenState extends State<ProviderJobDetailsScreen> {
     if (bookingId == null || customerId == null || providerId == null) return;
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => FileDisputeScreen(
-          bookingId: bookingId,
-          customerId: customerId,
-          providerId: providerId,
-          serviceName: job.title,
-        ),
+        builder:
+            (_) => FileDisputeScreen(
+              bookingId: bookingId,
+              customerId: customerId,
+              providerId: providerId,
+              serviceName: job.title,
+            ),
       ),
     );
   }
 
-  Widget _infoRow(BuildContext context, IconData icon, String label, String value) {
+  Widget _infoRow(
+    BuildContext context,
+    IconData icon,
+    String label,
+    String value,
+  ) {
     final tokens = context.tokens;
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 13),
-      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: tokens.line))),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: tokens.line)),
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             width: 32,
             height: 32,
-            decoration: BoxDecoration(color: tokens.chip, borderRadius: BorderRadius.circular(10)),
+            decoration: BoxDecoration(
+              color: tokens.chip,
+              borderRadius: BorderRadius.circular(10),
+            ),
             child: Icon(icon, size: 16, color: AppColors.primary),
           ),
           const SizedBox(width: 12),
@@ -130,12 +244,23 @@ class _ProviderJobDetailsScreenState extends State<ProviderJobDetailsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: tokens.mut)),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: tokens.mut,
+                  ),
+                ),
                 Padding(
                   padding: const EdgeInsets.only(top: 1),
                   child: Text(
                     value,
-                    style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: tokens.tx),
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w700,
+                      color: tokens.tx,
+                    ),
                   ),
                 ),
               ],
@@ -171,18 +296,36 @@ class _ProviderJobDetailsScreenState extends State<ProviderJobDetailsScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(job.title, style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: tokens.tx)),
+                        Text(
+                          job.title,
+                          style: TextStyle(
+                            fontSize: 19,
+                            fontWeight: FontWeight.w800,
+                            color: tokens.tx,
+                          ),
+                        ),
                         Padding(
                           padding: const EdgeInsets.only(top: 3),
                           child: Text(
                             job.timeLabel,
-                            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: tokens.mut),
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: tokens.mut,
+                            ),
                           ),
                         ),
                       ],
                     ),
                   ),
-                  Text(formatRand(job.price), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.primary)),
+                  Text(
+                    formatRand(job.price),
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.primary,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -198,14 +341,27 @@ class _ProviderJobDetailsScreenState extends State<ProviderJobDetailsScreen> {
                 children: [
                   _infoRow(context, LucideIcons.mapPin, 'Address', address),
                   if (job.customerId == null)
-                    _infoRow(context, LucideIcons.user, 'Customer', providerJobCustomer)
+                    _infoRow(
+                      context,
+                      LucideIcons.user,
+                      'Customer',
+                      providerJobCustomer,
+                    )
                   else
                     FutureBuilder<String?>(
                       future: _customerNameFuture,
                       builder: (context, snapshot) {
-                        final customerName = snapshot.data ??
-                            (snapshot.connectionState == ConnectionState.waiting ? 'Loading…' : 'Customer');
-                        return _infoRow(context, LucideIcons.user, 'Customer', customerName);
+                        final customerName =
+                            snapshot.data ??
+                            (snapshot.connectionState == ConnectionState.waiting
+                                ? 'Loading…'
+                                : 'Customer');
+                        return _infoRow(
+                          context,
+                          LucideIcons.user,
+                          'Customer',
+                          customerName,
+                        );
                       },
                     ),
                   _infoRow(
@@ -222,7 +378,9 @@ class _ProviderJobDetailsScreenState extends State<ProviderJobDetailsScreen> {
               margin: const EdgeInsets.only(bottom: 22),
               decoration: BoxDecoration(
                 color: const Color(0x1AFFC107), // rgba(255,193,7,.1)
-                border: Border.all(color: const Color(0x4DFFC107)), // rgba(255,193,7,.3)
+                border: Border.all(
+                  color: const Color(0x4DFFC107),
+                ), // rgba(255,193,7,.3)
                 borderRadius: BorderRadius.circular(14),
               ),
               child: Column(
@@ -233,20 +391,38 @@ class _ProviderJobDetailsScreenState extends State<ProviderJobDetailsScreen> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(LucideIcons.info, size: 14, color: AppColors.accent),
+                        Icon(
+                          LucideIcons.info,
+                          size: 14,
+                          color: AppColors.accent,
+                        ),
                         SizedBox(width: 6),
-                        Text('CUSTOMER NOTES', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: AppColors.accent)),
+                        Text(
+                          'CUSTOMER NOTES',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.accent,
+                          ),
+                        ),
                       ],
                     ),
                   ),
                   Text(
-                    providerJobCustomerNote,
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, height: 1.5, color: tokens.tx),
+                    job.notes?.trim().isNotEmpty == true
+                        ? job.notes!
+                        : providerJobCustomerNote,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      height: 1.5,
+                      color: tokens.tx,
+                    ),
                   ),
                 ],
               ),
             ),
-            if (job.id != null && job.customerId != null)
+            if (_accepted && job.id != null && job.customerId != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: SizedBox(
@@ -257,14 +433,22 @@ class _ProviderJobDetailsScreenState extends State<ProviderJobDetailsScreen> {
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.primary,
                       side: const BorderSide(color: AppColors.primary),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(13),
+                      ),
                     ),
                     icon: const Icon(LucideIcons.messageCircle, size: 17),
-                    label: const Text('Message Customer', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800)),
+                    label: const Text(
+                      'Message Customer',
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
                   ),
                 ),
               ),
-            if (widget.isAlreadyAccepted && job.id != null && job.customerId != null)
+            if (_accepted && job.id != null && job.customerId != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: SizedBox(
@@ -272,20 +456,36 @@ class _ProviderJobDetailsScreenState extends State<ProviderJobDetailsScreen> {
                   height: 44,
                   child: TextButton.icon(
                     onPressed: _reportIssue,
-                    style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.danger,
+                    ),
                     icon: const Icon(LucideIcons.flag, size: 16),
-                    label: const Text('Report an issue', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700)),
+                    label: const Text(
+                      'Report an issue',
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ),
                 ),
               ),
             PrimaryCtaButton(
-              label: widget.isAlreadyAccepted
-                  ? 'Start Navigation'
-                  : (_claiming ? 'Accepting…' : 'Accept Job'),
+              label: switch ((_accepted, _status, _working)) {
+                (_, _, true) => 'Updating…',
+                (false, _, false) => 'Accept Job',
+                (true, 'en_route', false) => 'Continue Travel',
+                (true, 'in_progress', false) => 'Continue Job',
+                (true, 'completed', false) => 'Job Completed',
+                _ => 'Start Travel',
+              },
               style: AppTheme.amberAction,
               shadowColor: AppColors.accent,
               shadowAlpha: 0.6,
-              onPressed: _claiming ? null : _acceptJob,
+              onPressed:
+                  _working || _status == 'completed'
+                      ? null
+                      : (_accepted ? _startTravel : _acceptJob),
             ),
           ],
         ),

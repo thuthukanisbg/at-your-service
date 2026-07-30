@@ -5,10 +5,12 @@ import 'package:at_your_service/core/services/auth_service.dart';
 import 'package:at_your_service/core/theme/app_theme.dart';
 import 'package:at_your_service/core/widgets/mobile_frame.dart';
 import 'package:at_your_service/features/admin/admin_login_screen.dart';
+import 'package:at_your_service/features/customer/customer_shell.dart';
 import 'package:at_your_service/features/onboarding/auth_screen.dart';
 import 'package:at_your_service/features/onboarding/onboarding_screen.dart';
 import 'package:at_your_service/features/onboarding/splash_screen.dart';
 import 'package:at_your_service/features/role_select/role_select_screen.dart';
+import 'package:at_your_service/models/user_role.dart';
 
 /// Wraps a screen the same way the real app does (theme + Navigator +
 /// MobileFrame) without requiring the full entry-flow chain to be pushed
@@ -25,10 +27,36 @@ Widget _harness(Widget screen) {
 /// live Firebase app, which widget tests don't have.
 class _StubAuthService extends AuthService {
   @override
-  Future<void> signIn({required String email, required String password}) async {}
+  Future<void> signIn({
+    required String email,
+    required String password,
+  }) async {}
 
   @override
-  Future<void> signUp({required String name, required String email, required String password}) async {}
+  Future<void> signUp({
+    required String name,
+    required String email,
+    required String password,
+  }) async {}
+
+  @override
+  Future<void> signInWithGoogle() async {}
+
+  @override
+  Future<UserRole?> fetchSavedRole() async => null;
+
+  @override
+  Future<void> signOut() async {}
+}
+
+class _AdminAuthService extends _StubAuthService {
+  @override
+  Future<UserRole?> fetchSavedRole() async => UserRole.admin;
+}
+
+class _GoogleCustomerAuthService extends _StubAuthService {
+  @override
+  Future<UserRole?> fetchSavedRole() async => UserRole.customer;
 }
 
 void main() {
@@ -36,25 +64,30 @@ void main() {
     AuthService.instance = _StubAuthService();
   });
 
-  testWidgets('Splash shows the brand copy and both entry CTAs, Get Started opens Onboarding', (tester) async {
-    await tester.pumpWidget(_harness(const SplashScreen()));
+  testWidgets(
+    'Splash shows the brand copy and both entry CTAs, Get Started opens Onboarding',
+    (tester) async {
+      await tester.pumpWidget(_harness(const SplashScreen()));
 
-    expect(find.text('At Your Service'), findsOneWidget);
-    expect(find.text('Every time.'), findsOneWidget);
-    expect(find.text('Get Started'), findsOneWidget);
-    expect(find.text('I already have an account'), findsOneWidget);
+      expect(find.text('At Your Service'), findsOneWidget);
+      expect(find.text('Every time.'), findsOneWidget);
+      expect(find.text('Get Started'), findsOneWidget);
+      expect(find.text('I already have an account'), findsOneWidget);
 
-    // Splash's floaty logo animation repeats forever, so pumpAndSettle()
-    // would hang while it's still mounted mid-transition — pump manually
-    // instead (see the pulsing-dot gotcha noted in CLAUDE.md).
-    await tester.tap(find.text('Get Started'));
-    await tester.pump(const Duration(milliseconds: 300));
-    await tester.pump(const Duration(milliseconds: 300));
+      // Splash's floaty logo animation repeats forever, so pumpAndSettle()
+      // would hang while it's still mounted mid-transition — pump manually
+      // instead (see the pulsing-dot gotcha noted in CLAUDE.md).
+      await tester.tap(find.text('Get Started'));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.text('Find trusted pros'), findsOneWidget);
-  });
+      expect(find.text('Find trusted pros'), findsOneWidget);
+    },
+  );
 
-  testWidgets('Splash "I already have an account" opens Auth directly', (tester) async {
+  testWidgets('Splash "I already have an account" opens Auth directly', (
+    tester,
+  ) async {
     await tester.pumpWidget(_harness(const SplashScreen()));
 
     await tester.tap(find.text('I already have an account'));
@@ -64,27 +97,35 @@ void main() {
     expect(find.text('Welcome back'), findsOneWidget);
   });
 
-  testWidgets('Onboarding Next advances slides and updates the button label, Skip jumps to Auth', (tester) async {
-    await tester.pumpWidget(_harness(const OnboardingScreen()));
+  testWidgets(
+    'Onboarding Next advances slides and updates the button label, Skip jumps to Auth',
+    (tester) async {
+      await tester.pumpWidget(_harness(const OnboardingScreen()));
 
-    expect(find.text('Find trusted pros'), findsOneWidget);
-    expect(find.widgetWithText(ElevatedButton, 'Next'), findsOneWidget);
+      expect(find.text('Find trusted pros'), findsOneWidget);
+      expect(find.widgetWithText(ElevatedButton, 'Next'), findsOneWidget);
 
-    await tester.tap(find.widgetWithText(ElevatedButton, 'Next'));
-    await tester.pumpAndSettle();
-    expect(find.text('Book in seconds'), findsOneWidget);
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Next'));
+      await tester.pumpAndSettle();
+      expect(find.text('Book in seconds'), findsOneWidget);
 
-    await tester.tap(find.widgetWithText(ElevatedButton, 'Next'));
-    await tester.pumpAndSettle();
-    expect(find.text('Safe & guaranteed'), findsOneWidget);
-    expect(find.widgetWithText(ElevatedButton, 'Get Started'), findsOneWidget);
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Next'));
+      await tester.pumpAndSettle();
+      expect(find.text('Safe & guaranteed'), findsOneWidget);
+      expect(
+        find.widgetWithText(ElevatedButton, 'Get Started'),
+        findsOneWidget,
+      );
 
-    await tester.tap(find.widgetWithText(ElevatedButton, 'Get Started'));
-    await tester.pumpAndSettle();
-    expect(find.text('Welcome back'), findsOneWidget);
-  });
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Get Started'));
+      await tester.pumpAndSettle();
+      expect(find.text('Welcome back'), findsOneWidget);
+    },
+  );
 
-  testWidgets('Onboarding Skip jumps straight to Auth from the first slide', (tester) async {
+  testWidgets('Onboarding Skip jumps straight to Auth from the first slide', (
+    tester,
+  ) async {
     await tester.pumpWidget(_harness(const OnboardingScreen()));
 
     await tester.tap(find.text('Skip'));
@@ -93,42 +134,53 @@ void main() {
     expect(find.text('Welcome back'), findsOneWidget);
   });
 
-  testWidgets('Auth swaps field count between Sign In and Sign Up, and sign-up opens the chooser', (tester) async {
-    await tester.pumpWidget(_harness(const AuthScreen()));
+  testWidgets(
+    'Auth swaps field count between Sign In and Sign Up, and sign-up opens the chooser',
+    (tester) async {
+      await tester.pumpWidget(_harness(const AuthScreen()));
 
-    expect(find.text('Welcome back'), findsOneWidget);
-    expect(find.byType(TextField), findsNWidgets(2));
-    expect(find.text('Full name'), findsNothing);
+      expect(find.text('Welcome back'), findsOneWidget);
+      expect(find.byType(TextField), findsNWidgets(2));
+      expect(find.text('Full name'), findsNothing);
 
-    await tester.tap(find.text('Sign Up'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('Sign Up'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('Create account'), findsOneWidget);
-    expect(find.text('Full name'), findsOneWidget);
-    expect(find.byType(TextField), findsNWidgets(3));
+      expect(find.text('Create account'), findsOneWidget);
+      expect(find.text('Full name'), findsOneWidget);
+      expect(find.byType(TextField), findsNWidgets(3));
 
-    await tester.enterText(find.byType(TextField).at(0), 'Thandi Nkosi');
-    await tester.enterText(find.byType(TextField).at(1), 'thandi@example.com');
-    await tester.enterText(find.byType(TextField).at(2), 'password123');
-    await tester.tap(find.widgetWithText(ElevatedButton, 'Create Account'));
-    await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).at(0), 'Thandi Nkosi');
+      await tester.enterText(
+        find.byType(TextField).at(1),
+        'thandi@example.com',
+      );
+      await tester.enterText(find.byType(TextField).at(2), 'password123');
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Create Account'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('Customer'), findsOneWidget);
-    expect(find.text('Provider'), findsOneWidget);
-    expect(find.text('Admin'), findsOneWidget);
-  });
+      expect(find.text('Customer'), findsOneWidget);
+      expect(find.text('Provider'), findsOneWidget);
+      expect(find.text('Admin'), findsNothing);
+    },
+  );
 
-  testWidgets('Auth sign-in with empty fields shows a validation message instead of navigating', (tester) async {
-    await tester.pumpWidget(_harness(const AuthScreen()));
+  testWidgets(
+    'Auth sign-in with empty fields shows a validation message instead of navigating',
+    (tester) async {
+      await tester.pumpWidget(_harness(const AuthScreen()));
 
-    await tester.tap(find.widgetWithText(ElevatedButton, 'Sign In'));
-    await tester.pump();
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Sign In'));
+      await tester.pump();
 
-    expect(find.text('Please fill in all fields.'), findsOneWidget);
-    expect(find.byType(RoleSelectScreen), findsNothing);
-  });
+      expect(find.text('Please fill in all fields.'), findsOneWidget);
+      expect(find.byType(RoleSelectScreen), findsNothing);
+    },
+  );
 
-  testWidgets('Auth surfaces sign-in failures from the service as a snackbar', (tester) async {
+  testWidgets('Auth surfaces sign-in failures from the service as a snackbar', (
+    tester,
+  ) async {
     AuthService.instance = _FailingAuthService();
     await tester.pumpWidget(_harness(const AuthScreen()));
 
@@ -141,35 +193,43 @@ void main() {
     expect(find.byType(RoleSelectScreen), findsNothing);
   });
 
-  testWidgets('Auth Google button is coming-soon, not an auth bypass', (tester) async {
+  testWidgets('Auth Google button signs a customer in through AuthService', (
+    tester,
+  ) async {
+    AuthService.instance = _GoogleCustomerAuthService();
     await tester.pumpWidget(_harness(const AuthScreen()));
 
     await tester.tap(find.text('Google'));
-    await tester.pump();
+    await tester.pumpAndSettle();
 
-    expect(find.text('Google sign-in arrives in the next milestone.'), findsOneWidget);
+    expect(find.byType(CustomerShell), findsOneWidget);
     expect(find.byType(RoleSelectScreen), findsNothing);
   });
 
-  testWidgets('Auth Phone button opens the phone sign-in sheet with empty-input validation', (tester) async {
-    await tester.pumpWidget(_harness(const AuthScreen()));
+  testWidgets(
+    'Auth Phone button opens the phone sign-in sheet with empty-input validation',
+    (tester) async {
+      await tester.pumpWidget(_harness(const AuthScreen()));
 
-    await tester.tap(find.text('Phone'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('Phone'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('Sign in with phone'), findsOneWidget);
+      expect(find.text('Sign in with phone'), findsOneWidget);
 
-    // Validation happens before any Firebase call, so this is safely
-    // testable without a live app — actually sending/confirming a code
-    // isn't (ConfirmationResult can't be constructed outside the package),
-    // so that part is verified manually in the browser instead.
-    await tester.tap(find.text('Send Code'));
-    await tester.pump();
+      // Validation happens before any Firebase call, so this is safely
+      // testable without a live app — actually sending/confirming a code
+      // isn't (ConfirmationResult can't be constructed outside the package),
+      // so that part is verified manually in the browser instead.
+      await tester.tap(find.text('Send Code'));
+      await tester.pump();
 
-    expect(find.text('Enter a phone number.'), findsOneWidget);
-  });
+      expect(find.text('Enter a phone number.'), findsOneWidget);
+    },
+  );
 
-  testWidgets('Auth screen links to the dedicated Admin sign-in screen', (tester) async {
+  testWidgets('Auth screen links to the dedicated Admin sign-in screen', (
+    tester,
+  ) async {
     addTearDown(MobileFrame.resetWideLayoutForTest);
     await tester.pumpWidget(_harness(const AuthScreen()));
 
@@ -180,7 +240,11 @@ void main() {
     // many elements" resolving which one to drag. `.first` picks the outer
     // ListView's own Scrollable, which is what actually needs scrolling.
     final adminLink = find.widgetWithText(TextButton, 'Admin? Sign in here');
-    await tester.scrollUntilVisible(adminLink, 300, scrollable: find.byType(Scrollable).first);
+    await tester.scrollUntilVisible(
+      adminLink,
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
     // scrollUntilVisible stops as soon as any sliver of the target enters
     // the viewport, which can still leave its center (what tap() targets)
     // below the fold — nudge a bit further to be safe.
@@ -195,32 +259,58 @@ void main() {
     expect(find.text('Sign Up'), findsNothing);
   });
 
-  testWidgets('Admin sign-in with empty fields shows a validation message instead of navigating', (tester) async {
-    addTearDown(MobileFrame.resetWideLayoutForTest);
-    await tester.pumpWidget(_harness(const AdminLoginScreen()));
+  testWidgets(
+    'Admin sign-in with empty fields shows a validation message instead of navigating',
+    (tester) async {
+      addTearDown(MobileFrame.resetWideLayoutForTest);
+      await tester.pumpWidget(_harness(const AdminLoginScreen()));
 
-    await tester.tap(find.text('Sign In'));
-    await tester.pump();
+      await tester.tap(find.text('Sign In'));
+      await tester.pump();
 
-    expect(find.text('Please enter both email and password.'), findsOneWidget);
-  });
+      expect(
+        find.text('Please enter both email and password.'),
+        findsOneWidget,
+      );
+    },
+  );
 
-  testWidgets('Admin sign-in navigates straight to the desktop-capable AdminShell, no role picker', (tester) async {
-    addTearDown(MobileFrame.resetWideLayoutForTest);
-    await tester.pumpWidget(_harness(const AdminLoginScreen()));
+  testWidgets(
+    'Admin sign-in navigates straight to the desktop-capable AdminShell, no role picker',
+    (tester) async {
+      addTearDown(MobileFrame.resetWideLayoutForTest);
+      AuthService.instance = _AdminAuthService();
+      await tester.pumpWidget(_harness(const AdminLoginScreen()));
 
-    await tester.enterText(find.byType(TextField).at(0), 'admin@example.com');
-    await tester.enterText(find.byType(TextField).at(1), 'password123');
-    await tester.tap(find.text('Sign In'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
+      await tester.enterText(find.byType(TextField).at(0), 'admin@example.com');
+      await tester.enterText(find.byType(TextField).at(1), 'password123');
+      await tester.tap(find.text('Sign In'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
 
-    expect(find.byType(RoleSelectScreen), findsNothing);
-    // Default (narrow) test viewport falls back to the mobile Admin
-    // experience, same as any other Admin entry point below the desktop
-    // breakpoint — this just confirms it landed in Admin at all.
-    expect(find.text('Dashboard'), findsOneWidget);
-  });
+      expect(find.byType(RoleSelectScreen), findsNothing);
+      // Default (narrow) test viewport falls back to the mobile Admin
+      // experience, same as any other Admin entry point below the desktop
+      // breakpoint — this just confirms it landed in Admin at all.
+      expect(find.text('Dashboard'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'Admin sign-in rejects an account without a provisioned admin role',
+    (tester) async {
+      addTearDown(MobileFrame.resetWideLayoutForTest);
+      await tester.pumpWidget(_harness(const AdminLoginScreen()));
+
+      await tester.enterText(find.byType(TextField).at(0), 'new@example.com');
+      await tester.enterText(find.byType(TextField).at(1), 'password123');
+      await tester.tap(find.text('Sign In'));
+      await tester.pumpAndSettle();
+
+      expect(find.text("This account isn't an admin account."), findsOneWidget);
+      expect(find.text('Dashboard'), findsNothing);
+    },
+  );
 }
 
 class _FailingAuthService extends AuthService {

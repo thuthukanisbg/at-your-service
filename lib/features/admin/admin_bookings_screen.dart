@@ -19,7 +19,8 @@ class AdminBookingsScreen extends StatefulWidget {
 }
 
 class _AdminBookingsScreenState extends State<AdminBookingsScreen> {
-  late final Future<List<AdminBookingSummary>> _bookingsFuture = fetchAllBookings();
+  late final Stream<List<AdminBookingSummary>> _bookingsStream =
+      watchAllBookings();
 
   @override
   Widget build(BuildContext context) {
@@ -31,28 +32,46 @@ class _AdminBookingsScreenState extends State<AdminBookingsScreen> {
           children: [
             Text(
               'Bookings',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.5, color: tokens.tx),
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.5,
+                color: tokens.tx,
+              ),
             ),
             const SizedBox(height: 4),
             Text(
               'Every booking on the platform.',
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: tokens.mut),
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: tokens.mut,
+              ),
             ),
             const SizedBox(height: 18),
-            FutureBuilder<List<AdminBookingSummary>>(
-              future: _bookingsFuture,
+            StreamBuilder<List<AdminBookingSummary>>(
+              stream: _bookingsStream,
               builder: (context, snapshot) {
                 if (!snapshot.hasData && !snapshot.hasError) {
                   return const Padding(
                     padding: EdgeInsets.symmetric(vertical: 40),
-                    child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
+                    child: Center(
+                      child: CircularProgressIndicator(strokeWidth: 2.4),
+                    ),
                   );
                 }
                 if (snapshot.hasError) {
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 40),
                     child: Center(
-                      child: Text("Couldn't load bookings.", style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: tokens.mut)),
+                      child: Text(
+                        "Couldn't load bookings.",
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
+                          color: tokens.mut,
+                        ),
+                      ),
                     ),
                   );
                 }
@@ -61,11 +80,20 @@ class _AdminBookingsScreenState extends State<AdminBookingsScreen> {
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 40),
                     child: Center(
-                      child: Text('No bookings yet.', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: tokens.mut)),
+                      child: Text(
+                        'No bookings yet.',
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
+                          color: tokens.mut,
+                        ),
+                      ),
                     ),
                   );
                 }
-                return Column(children: [for (final b in bookings) _BookingRow(booking: b)]);
+                return Column(
+                  children: [for (final b in bookings) _BookingRow(booking: b)],
+                );
               },
             ),
           ],
@@ -101,18 +129,47 @@ class _BookingRow extends StatelessWidget {
                   booking.serviceName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: tokens.tx),
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: tokens.tx,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${booking.customerName} → ${booking.providerName}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                    color: tokens.tx,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Row(
                   children: [
                     Icon(LucideIcons.mapPin, size: 12, color: tokens.mut),
                     const SizedBox(width: 4),
-                    Text(booking.city, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: tokens.mut)),
+                    Text(
+                      booking.city,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: tokens.mut,
+                      ),
+                    ),
                     const SizedBox(width: 10),
                     Icon(LucideIcons.calendar, size: 12, color: tokens.mut),
                     const SizedBox(width: 4),
-                    Text(booking.scheduleLabel, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: tokens.mut)),
+                    Text(
+                      booking.scheduleLabel,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: tokens.mut,
+                      ),
+                    ),
                   ],
                 ),
               ],
@@ -122,7 +179,14 @@ class _BookingRow extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(formatRand(booking.price), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.primary)),
+              Text(
+                formatRand(booking.price),
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.primary,
+                ),
+              ),
               const SizedBox(height: 4),
               StatusBadge(status: booking.status),
             ],

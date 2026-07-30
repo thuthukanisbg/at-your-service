@@ -6,6 +6,7 @@ import 'customer_bookings_screen.dart';
 import 'customer_home_screen.dart';
 import 'customer_messages_screen.dart';
 import 'customer_profile_screen.dart';
+import '../messaging/messaging_service.dart';
 
 class CustomerShell extends StatelessWidget {
   const CustomerShell({super.key});
@@ -14,15 +15,15 @@ class CustomerShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const RoleNavShell(
+    return RoleNavShell(
       tabs: [
-        NavTab(
+        const NavTab(
           icon: LucideIcons.home,
           selectedIcon: LucideIcons.home,
           label: 'Home',
           body: CustomerHomeScreen(),
         ),
-        NavTab(
+        const NavTab(
           icon: LucideIcons.calendarCheck,
           selectedIcon: LucideIcons.calendarCheck,
           label: 'Bookings',
@@ -32,12 +33,10 @@ class CustomerShell extends StatelessWidget {
           icon: LucideIcons.messageCircle,
           selectedIcon: LucideIcons.messageCircle,
           label: 'Messages',
-          body: CustomerMessagesScreen(),
-          // No unread-tracking on messages yet (would need a per-participant
-          // read receipt on each conversation) — was hardcoded on before,
-          // now honestly off rather than a permanent fake badge.
+          body: const CustomerMessagesScreen(),
+          badgeStream: watchHasUnreadCustomerConversations(),
         ),
-        NavTab(
+        const NavTab(
           icon: LucideIcons.user,
           selectedIcon: LucideIcons.user,
           label: 'Profile',

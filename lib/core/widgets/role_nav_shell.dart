@@ -1,5 +1,7 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
+import '../platform/platform_design.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_tokens.dart';
 
@@ -10,6 +12,7 @@ class NavTab {
     required this.label,
     required this.body,
     this.showBadge = false,
+    this.badgeStream,
   });
 
   final IconData icon;
@@ -17,17 +20,12 @@ class NavTab {
   final String label;
   final Widget body;
   final bool showBadge;
+  final Stream<bool>? badgeStream;
 }
 
-/// Persistent bottom-nav shell shared by all three roles. Each role passes
-/// its own [NavTab]s — only the first tab needs to be a real screen.
-///
-/// This is a flat custom bar, not Material 3's [NavigationBar] — that widget
-/// always reserves space for a pill-shaped selection indicator (even with
-/// `indicatorColor: Colors.transparent`), which reads noticeably softer/more
-/// padded than the handoff's minimal icon+label bar with no indicator at
-/// all. Matches the handoff's literal `padding:9px 12px 24px` + 1px
-/// top-border bar exactly instead.
+/// Persistent role shell with shared state/content and native-feeling
+/// navigation presentation: Cupertino tabs on iOS and a Material 3
+/// NavigationBar on Android.
 class RoleNavShell extends StatefulWidget {
   const RoleNavShell({super.key, required this.tabs});
 
@@ -43,63 +41,69 @@ class _RoleNavShellState extends State<RoleNavShell> {
   @override
   Widget build(BuildContext context) {
     final tokens = context.tokens;
-    // The handoff hardcodes 24px as its emulated device's home-indicator
-    // safe area. On a real device, use whichever is larger — the actual
-    // inset (bigger on notched phones), or 24 (so it still matches the
-    // handoff exactly on devices/browsers with no inset of their own).
-    final bottomInset = MediaQuery.of(context).padding.bottom;
     return Scaffold(
       body: IndexedStack(
         index: _index,
         children: [for (final tab in widget.tabs) tab.body],
       ),
-      bottomNavigationBar: DecoratedBox(
-        decoration: BoxDecoration(
-          color: tokens.surface,
-          border: Border(top: BorderSide(color: tokens.line)),
-        ),
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(12, 9, 12, bottomInset > 24 ? bottomInset : 24),
-          child: Row(
-            children: [
-              for (var i = 0; i < widget.tabs.length; i++)
-                Expanded(
-                  child: _NavItem(
-                    tab: widget.tabs[i],
-                    selected: i == _index,
-                    onTap: () => setState(() => _index = i),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
+      bottomNavigationBar:
+          context.usesCupertinoDesign
+              ? CupertinoTabBar(
+                currentIndex: _index,
+                onTap: (index) => setState(() => _index = index),
+                activeColor: AppColors.primary,
+                inactiveColor: tokens.mut,
+                backgroundColor: tokens.surface.withValues(alpha: 0.96),
+                border: Border(top: BorderSide(color: tokens.line, width: 0.5)),
+                iconSize: 22,
+                height: 52,
+                items: [
+                  for (final tab in widget.tabs)
+                    BottomNavigationBarItem(
+                      icon: _TabIcon(tab: tab, selected: false),
+                      activeIcon: _TabIcon(tab: tab, selected: true),
+                      label: tab.label,
+                    ),
+                ],
+              )
+              : NavigationBar(
+                selectedIndex: _index,
+                onDestinationSelected:
+                    (index) => setState(() => _index = index),
+                destinations: [
+                  for (final tab in widget.tabs)
+                    NavigationDestination(
+                      icon: _TabIcon(tab: tab, selected: false),
+                      selectedIcon: _TabIcon(tab: tab, selected: true),
+                      label: tab.label,
+                    ),
+                ],
+              ),
     );
   }
 }
 
-class _NavItem extends StatelessWidget {
-  const _NavItem({required this.tab, required this.selected, required this.onTap});
+class _TabIcon extends StatelessWidget {
+  const _TabIcon({required this.tab, required this.selected});
 
   final NavTab tab;
   final bool selected;
-  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final tokens = context.tokens;
-    final color = selected ? AppColors.primary : tokens.mut;
-    final icon = Icon(selected ? tab.selectedIcon : tab.icon, size: 21, color: color);
-    return InkWell(
-      onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          tab.showBadge ? Badge(backgroundColor: AppColors.danger, child: icon) : icon,
-          const SizedBox(height: 4),
-          Text(tab.label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: color)),
-        ],
-      ),
-    );
+    final icon = Icon(selected ? tab.selectedIcon : tab.icon, size: 22);
+    if (tab.badgeStream != null) {
+      return StreamBuilder<bool>(
+        stream: tab.badgeStream,
+        initialData: false,
+        builder: (context, snapshot) {
+          return snapshot.data ?? false
+              ? Badge(backgroundColor: AppColors.danger, child: icon)
+              : icon;
+        },
+      );
+    }
+    if (!tab.showBadge) return icon;
+    return Badge(backgroundColor: AppColors.danger, child: icon);
   }
 }

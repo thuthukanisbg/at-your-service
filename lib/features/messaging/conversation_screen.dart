@@ -40,6 +40,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
   final _textController = TextEditingController();
   final _scrollController = ScrollController();
   bool _sending = false;
+  int _lastMarkedMessageCount = -1;
 
   @override
   void dispose() {
@@ -88,32 +89,57 @@ class _ConversationScreenState extends State<ConversationScreen> {
                 stream: watchMessages(widget.bookingId),
                 builder: (context, snapshot) {
                   if (!snapshot.hasData && !snapshot.hasError) {
-                    return const Center(child: CircularProgressIndicator(strokeWidth: 2.4));
+                    return const Center(
+                      child: CircularProgressIndicator(strokeWidth: 2.4),
+                    );
                   }
                   if (snapshot.hasError) {
                     return Center(
-                      child: Text("Couldn't load messages.", style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: tokens.mut)),
+                      child: Text(
+                        "Couldn't load messages.",
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
+                          color: tokens.mut,
+                        ),
+                      ),
                     );
                   }
                   final messages = snapshot.data!;
+                  if (_lastMarkedMessageCount != messages.length) {
+                    _lastMarkedMessageCount = messages.length;
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      markConversationRead(widget.bookingId).catchError((_) {});
+                    });
+                  }
                   if (messages.isEmpty) {
                     return Center(
                       child: Text(
                         'No messages yet — say hello.',
-                        style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: tokens.mut),
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
+                          color: tokens.mut,
+                        ),
                       ),
                     );
                   }
                   WidgetsBinding.instance.addPostFrameCallback((_) {
                     if (_scrollController.hasClients) {
-                      _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+                      _scrollController.jumpTo(
+                        _scrollController.position.maxScrollExtent,
+                      );
                     }
                   });
                   return ListView.builder(
                     controller: _scrollController,
                     padding: const EdgeInsets.fromLTRB(18, 8, 18, 8),
                     itemCount: messages.length,
-                    itemBuilder: (context, index) => _MessageBubble(message: messages[index], isMine: messages[index].senderId == myUid),
+                    itemBuilder:
+                        (context, index) => _MessageBubble(
+                          message: messages[index],
+                          isMine: messages[index].senderId == myUid,
+                        ),
                   );
                 },
               ),
@@ -134,12 +160,20 @@ class _ConversationScreenState extends State<ConversationScreen> {
                       child: TextField(
                         controller: _textController,
                         onSubmitted: (_) => _send(),
-                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: tokens.tx),
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: tokens.tx,
+                        ),
                         decoration: InputDecoration(
                           isCollapsed: true,
                           border: InputBorder.none,
                           hintText: 'Message…',
-                          hintStyle: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: tokens.mut),
+                          hintStyle: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: tokens.mut,
+                          ),
                         ),
                       ),
                     ),
@@ -151,8 +185,15 @@ class _ConversationScreenState extends State<ConversationScreen> {
                     child: Container(
                       width: 46,
                       height: 46,
-                      decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
-                      child: const Icon(LucideIcons.send, size: 18, color: Colors.white),
+                      decoration: const BoxDecoration(
+                        color: AppColors.primary,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        LucideIcons.send,
+                        size: 18,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
                 ],
@@ -179,7 +220,9 @@ class _MessageBubble extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.72),
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.72,
+        ),
         decoration: BoxDecoration(
           color: isMine ? AppColors.primary : tokens.card,
           border: isMine ? null : Border.all(color: tokens.line),
@@ -191,7 +234,11 @@ class _MessageBubble extends StatelessWidget {
           children: [
             Text(
               message.text,
-              style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w500, color: isMine ? Colors.white : tokens.tx),
+              style: TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w500,
+                color: isMine ? Colors.white : tokens.tx,
+              ),
             ),
             if (message.createdAt != null)
               Padding(
@@ -201,7 +248,10 @@ class _MessageBubble extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 9.5,
                     fontWeight: FontWeight.w600,
-                    color: isMine ? Colors.white.withValues(alpha: 0.7) : tokens.mut,
+                    color:
+                        isMine
+                            ? Colors.white.withValues(alpha: 0.7)
+                            : tokens.mut,
                   ),
                 ),
               ),
